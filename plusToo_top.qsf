@@ -344,7 +344,7 @@ set_global_assignment -name ENABLE_NCE_PIN OFF
 set_global_assignment -name ENABLE_BOOT_SEL_PIN OFF
 set_global_assignment -name SDC_FILE plusToo_top.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE plusToo_top.sv
-set_global_assignment -name QIP_FILE "../../mist-modules/mist.qip"
+set_global_assignment -name QIP_FILE "mist-modules/mist.qip"
 set_global_assignment -name SYSTEMVERILOG_FILE fx68k/uaddrPla.sv
 set_global_assignment -name SYSTEMVERILOG_FILE fx68k/fx68kAlu.sv
 set_global_assignment -name SYSTEMVERILOG_FILE fx68k/fx68k.sv
