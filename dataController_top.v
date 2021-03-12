@@ -57,6 +57,7 @@ module dataController_top(
 	input _hblank,
 	input _vblank,
 	input loadPixels,
+	output vid_alt,
 
 	// audio
 	output [10:0] audioOut,  // 8 bit audio + 3 bit volume
@@ -224,6 +225,7 @@ module dataController_top(
 	assign snd_alt = ~(~via_pa_oe[3] | via_pa_o[3]);
 	assign memoryOverlayOn = ~via_pa_oe[4] | via_pa_o[4];
 	assign SEL = ~via_pa_oe[5] | via_pa_o[5];
+	assign vid_alt = ~via_pa_oe[6] | via_pa_o[6];
 
 	//port B
 	assign via_pb_i = {1'b1, _hblank, mouseY2, mouseX2, mouseButton, 2'b11, rtcdat_o};

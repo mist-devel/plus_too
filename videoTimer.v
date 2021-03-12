@@ -3,6 +3,7 @@ module videoTimer(
 	input clk,
 	input clk_en,
 	input [1:0] busCycle,
+	input vid_alt,
 	output [21:0] videoAddr,	 
 	output reg hsync,
 	output reg vsync,
@@ -70,7 +71,7 @@ module videoTimer(
 	// kVisibleHeightStart divided by 2 to account for vertical pixel doubling.
 	// kVisibleWidth divided by 2 because it's the 8MHz visible width times 4 to get actual number of pixels, 
 	// 	then divided by 8 bits per byte	
-	assign videoAddr = kScreenBufferBase -
+	assign videoAddr = kScreenBufferBase - (vid_alt ? 16'h0 : 16'h8000) -
 							 (kVisibleHeightStart/2 * kVisibleWidth/2) +
 							 { ypos[9:1], xpos[6:2], 1'b0 };
 	

@@ -255,7 +255,7 @@ wire [3:0] key = 4'd0;
 	wire memoryLatch;
 	
 	// peripherals
-	wire loadPixels, pixelOut, _hblank, _vblank, hsync, vsync;
+	wire vid_alt, loadPixels, pixelOut, _hblank, _vblank, hsync, vsync;
 	wire memoryOverlayOn, selectSCSI, selectSCC, selectIWM, selectVIA, selectRAM, selectROM;
 	wire [15:0] dataControllerDataOut;
 	
@@ -433,6 +433,7 @@ wire [3:0] key = 4'd0;
 		._hblank(_hblank),
 		._vblank(_vblank),
 		.loadPixels(loadPixels),
+		.vid_alt(vid_alt),
 		.memoryOverlayOn(memoryOverlayOn),
 
 		.snd_alt(snd_alt),
@@ -517,6 +518,7 @@ wire [3:0] key = 4'd0;
 		._vblank(_vblank), 
 		.pixelOut(pixelOut),
 		.loadPixels(loadPixels),
+		.vid_alt(vid_alt),
 
 		.memoryOverlayOn(memoryOverlayOn),
 
