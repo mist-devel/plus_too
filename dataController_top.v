@@ -300,7 +300,7 @@ module dataController_top(
 		if (clk8_en_p) begin
 			if ((kbd_transmitting && !kbd_wait_receiving) || kbd_receiving) begin
 				kbdclk_count <= kbdclk_count + 1'd1;
-				if (kbdclk_count == 12'd1600) begin
+				if (kbdclk_count == 12'd1300) begin // ~165usec
 					kbdclk <= ~kbdclk;
 					kbdclk_count <= 0;
 					if (kbdclk) begin 
