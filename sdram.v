@@ -113,6 +113,8 @@ assign sd_ras = sd_cmd[2];
 assign sd_cas = sd_cmd[1];
 assign sd_we  = sd_cmd[0];
 
+reg oe_latch, we_latch;
+
 always @(posedge clk_64) begin
 	sd_cmd <= CMD_INHIBIT;  // default: idle
 	sd_data <= 16'bZZZZZZZZZZZZZZZZ;
@@ -135,36 +137,35 @@ always @(posedge clk_64) begin
 	end else begin
 		// normal operation
 
+		// RAS phase
 		// -------------------  cpu/chipset read/write ----------------------
-		if(we || oe) begin
-
-			// RAS phase
-			if(t == STATE_CMD_START) begin
+		if(t == STATE_CMD_START) begin
+			{oe_latch, we_latch} <= {oe, we};
+			if (we || oe) begin
 				sd_cmd <= CMD_ACTIVE;
 				sd_addr <= { 1'b0, addr[19:8] };
 				sd_ba <= addr[21:20];
 			end
-
-			// CAS phase 
-			if(t == STATE_CMD_CONT) begin
-				sd_cmd <= we?CMD_WRITE:CMD_READ;
-				if (we) sd_data <= din;
-				// always return both bytes in a read. The cpu may not
-				// need it, but the caches need to be able to store everything
-				if(!we) sd_dqm <= 2'b00;
-				else    sd_dqm <= ~ds;
-				sd_addr <= { 4'b0010, addr[22], addr[7:0] };  // auto precharge
-			end
-
-			// Data ready
-			if (t == STATE_READ && !we) dout <= sd_data;
-		end
-
 		// ------------------------ no access --------------------------
-		else begin
-			if(t == STATE_CMD_START)
+			else begin
 				sd_cmd <= CMD_AUTO_REFRESH;
+			end
 		end
+
+		// CAS phase 
+		if(t == STATE_CMD_CONT && (we_latch || oe_latch)) begin
+			sd_cmd <= we_latch?CMD_WRITE:CMD_READ;
+			if (we_latch) sd_data <= din;
+			// always return both bytes in a read. The cpu may not
+			// need it, but the caches need to be able to store everything
+			if(!we_latch) sd_dqm <= 2'b00;
+			else          sd_dqm <= ~ds;
+			sd_addr <= { 4'b0010, addr[22], addr[7:0] };  // auto precharge
+		end
+
+		// Data ready
+		if (t == STATE_READ && oe_latch) dout <= sd_data;
+
 	end
 end
 
