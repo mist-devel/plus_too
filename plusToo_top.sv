@@ -271,22 +271,26 @@ wire [3:0] key = 4'd0;
 
 	// dtack generation in turbo mode
 	reg  turbo_dtack_en, cpuBusControl_d;
+	reg  speed;
 	always @(posedge clk32) begin
 		if (!_cpuReset) begin
 			turbo_dtack_en <= 0;
+			speed <= status_turbo;
 		end
 		else begin
 			cpuBusControl_d <= cpuBusControl;
 			if (_cpuAS) turbo_dtack_en <= 0;
 			if (!_cpuAS & ((!cpuBusControl_d & cpuBusControl) | (!selectROM & !selectRAM))) turbo_dtack_en <= 1;
+
+			if (speed != status_turbo && _cpuAS && clk8_en_n && clk16_en_n) speed <= status_turbo;
 		end
 	end
 
 	assign      _cpuVPA = (cpuFC == 3'b111) ? 1'b0 : ~(!_cpuAS && cpuAddr[23:21] == 3'b111);
 	assign      _cpuDTACK = ~(!_cpuAS && cpuAddr[23:21] != 3'b111) | (status_turbo & !turbo_dtack_en);
 
-	wire        cpu_en_p      = status_turbo ? clk16_en_p : clk8_en_p;
-	wire        cpu_en_n      = status_turbo ? clk16_en_n : clk8_en_n;
+	wire        cpu_en_p      = speed ? clk16_en_p : clk8_en_p;
+	wire        cpu_en_n      = speed ? clk16_en_n : clk8_en_n;
 
 	wire        is68000       = status_cpu == 0;
 	assign      _cpuReset_o   = is68000 ? fx68_reset_n : tg68_reset_n;
