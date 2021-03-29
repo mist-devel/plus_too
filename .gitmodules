@@ -1,3 +1,6 @@
 [submodule "mist-modules"]
 	path = mist-modules
 	url = https://github.com/mist-devel/mist-modules.git
+[submodule "TG68K.C"]
+	path = TG68K.C
+	url = https://github.com/TobiFlex/TG68K.C.git
