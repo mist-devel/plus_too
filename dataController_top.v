@@ -7,6 +7,7 @@ module dataController_top(
 	input E_falling,
 	
 	// system control:
+	input machineType, // 0 - Mac Plus, 1 - Mac SE
 	input _systemReset,
 
 	// 68000 CPU control:
@@ -28,6 +29,7 @@ module dataController_top(
 	input selectSCC,
 	input selectIWM,
 	input selectVIA,
+	input selectSEOverlay,
 	input _cpuVMA,
 	
 	// RAM/ROM:
@@ -209,6 +211,15 @@ module dataController_top(
 	end
 	wire onesec = vblankCount == 59;
 
+	// Mac SE ROM overlay switch
+	reg  SEOverlay;
+	always @(posedge clk32) begin
+		if (!_cpuReset)
+			SEOverlay <= 1;
+		else if (selectSEOverlay)
+			SEOverlay <= 0;
+	end
+
 	// VIA
 	wire [2:0] snd_vol;
 	wire snd_ena;
@@ -223,7 +234,7 @@ module dataController_top(
 	assign via_pa_i = {sccWReq, ~via_pa_oe[6:0] | via_pa_o[6:0]};
 	assign snd_vol = ~via_pa_oe[2:0] | via_pa_o[2:0];
 	assign snd_alt = ~(~via_pa_oe[3] | via_pa_o[3]);
-	assign memoryOverlayOn = ~via_pa_oe[4] | via_pa_o[4];
+	assign memoryOverlayOn = machineType ? SEOverlay : ~via_pa_oe[4] | via_pa_o[4];
 	assign SEL = ~via_pa_oe[5] | via_pa_o[5];
 	assign vid_alt = ~via_pa_oe[6] | via_pa_o[6];
 

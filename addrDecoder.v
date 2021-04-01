@@ -80,6 +80,7 @@
 */
 
 module addrDecoder(
+	input [1:0] configROMSize,
 	input [23:0] address,
 	input _cpuAS,
 	input memoryOverlayOn,
@@ -88,7 +89,8 @@ module addrDecoder(
 	output reg selectSCSI,
 	output reg selectSCC,
 	output reg selectIWM,
-	output reg selectVIA
+	output reg selectVIA,
+	output reg selectSEOverlay
 );
 
 	always @(*) begin
@@ -98,9 +100,10 @@ module addrDecoder(
 		selectSCC = 0;
 		selectIWM = 0;
 		selectVIA = 0;
+		selectSEOverlay = 0;
 		
 		casez (address[23:20])
-			4'b00??: begin
+			4'b00??: begin //00 0000 - 3F FFFF
 				if (memoryOverlayOn == 0)
 					selectRAM = !_cpuAS;
 				else begin
@@ -111,12 +114,16 @@ module addrDecoder(
 					end
 				end
 			end
-			4'b0100: 
-				if( address[17] == 1'b0)   // <- this detects SCSI!!!
+			4'b0100: begin //40 0000 - 4F FFFF
+				if( configROMSize[1] || address[17] == 1'b0)   // <- this detects SCSI!!!
 					selectROM = !_cpuAS;
-			4'b0101: 
+				selectSEOverlay = 1;
+			end
+			4'b0101: begin //50 000 - 5F FFFF
 				if (address[19:12] == 8'h80)
 					selectSCSI = !_cpuAS;
+				selectSEOverlay = 1;
+			end
 			4'b0110: 
 				if (memoryOverlayOn)
 					selectRAM = !_cpuAS;

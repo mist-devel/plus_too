@@ -124,7 +124,11 @@ reg download_cycle_d;
 always @(posedge clk32) begin
 	download_cycle_d <= download_cycle;
 	if (~dio_clkref_n) dio_write <= 0;
-	if (dio_write_i) dio_write <= 1;
+	if (dio_write_i) begin
+		dio_write <= 1;
+		if (dio_index == 0)
+			configROMSize <= {|dio_addr[18:17], dio_addr[18] | (dio_addr[16] & !dio_addr[17])};
+	end
 end
 
 // keys and switches are dummies as the mist doesn't have any ...
@@ -225,11 +229,12 @@ wire [3:0] key = 4'd0;
 	);
 
 	// set the real-world inputs to sane defaults
-	localparam serialIn = 1'b0,
-				  configROMSize = 1'b1;  // 128K ROM
+	localparam serialIn = 1'b0;
 
 	wire [1:0] configRAMSize = status_mem?2'b11:2'b10; // 1MB/4MB
-				  
+	reg  [1:0] configROMSize; // 64/128/256/512K
+	wire       machineType = configROMSize[1]; // 0 - Mac Plus, 1 - Mac SE
+
 	// interconnects
 	// CPU
 	wire clk8, _cpuReset, _cpuReset_o, _cpuUDS, _cpuLDS, _cpuRW, _cpuAS;
@@ -256,7 +261,7 @@ wire [3:0] key = 4'd0;
 	
 	// peripherals
 	wire vid_alt, loadPixels, pixelOut, _hblank, _vblank, hsync, vsync;
-	wire memoryOverlayOn, selectSCSI, selectSCC, selectIWM, selectVIA, selectRAM, selectROM;
+	wire memoryOverlayOn, selectSCSI, selectSCC, selectIWM, selectVIA, selectRAM, selectROM, selectSEOverlay;
 	wire [15:0] dataControllerDataOut;
 	
 	// audio
@@ -350,6 +355,7 @@ wire [3:0] key = 4'd0;
 		.selectVIA(selectVIA),
 		.selectRAM(selectRAM),
 		.selectROM(selectROM),
+		.selectSEOverlay(selectSEOverlay),
 		.hsync(hsync), 
 		.vsync(vsync),
 		._hblank(_hblank),
@@ -400,11 +406,12 @@ wire [3:0] key = 4'd0;
 	);
 
 	dataController_top dc0(
-		.clk32(clk32), 
+		.clk32(clk32),
 		.clk8_en_p(clk8_en_p),
 		.clk8_en_n(clk8_en_n),
 		.E_rising(E_rising),
 		.E_falling(E_falling),
+		.machineType(machineType),
 		._systemReset(n_reset),
 		._cpuReset(_cpuReset), 
 		._cpuIPL(_cpuIPL),
@@ -421,6 +428,7 @@ wire [3:0] key = 4'd0;
 		.selectSCC(selectSCC),
 		.selectIWM(selectIWM),
 		.selectVIA(selectVIA),
+		.selectSEOverlay(selectSEOverlay),
 		.cpuBusControl(cpuBusControl),
 		.videoBusControl(videoBusControl),
 		.memoryDataOut(memoryDataOut),
