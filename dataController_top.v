@@ -143,7 +143,8 @@ module dataController_top(
 	wire [15:0] iwmDataOut;
 	wire [7:0] sccDataOut;
 	wire [7:0] scsiDataOut;
-	wire mouseX1, mouseX2, mouseY1, mouseY2, mouseButton;
+	wire mouseX1, mouseX2, mouseY1, mouseY2, mouseButton, mouseStrobe;
+	wire [8:0] mouseX, mouseY;
 	
 	// interrupt control
 	assign _cpuIPL = 
@@ -239,7 +240,7 @@ module dataController_top(
 	assign vid_alt = ~via_pa_oe[6] | via_pa_o[6];
 
 	//port B
-	assign via_pb_i = {1'b1, _hblank, mouseY2, mouseX2, mouseButton, 2'b11, rtcdat_o};
+	assign via_pb_i = {1'b1, {3{machineType}} | {_hblank, mouseY2, mouseX2}, machineType ? _ADBint : mouseButton, 2'b11, rtcdat_o};
 	assign snd_ena = ~via_pb_oe[7] | via_pb_o[7];
 
 	assign viaDataOut[7:0] = 8'hEF;
@@ -271,7 +272,7 @@ module dataController_top(
 		.ca1_i      (_vblank),
 		.ca2_i      (onesec),
 
-		.cb1_i      (kbdclk),
+		.cb1_i      (VIAShiftClk),
 		.cb2_i      (cb2_i),
 		.cb2_o      (cb2_o),
 		.cb2_t      (cb2_t),
@@ -294,14 +295,19 @@ module dataController_top(
 		.dat_o      (rtcdat_o)
 	);
 
-	reg kbdclk;
-	reg [10:0] kbdclk_count;
-	reg kbd_transmitting, kbd_wait_receiving, kbd_receiving;
-	reg [2:0] kbd_bitcnt;
+	wire _ADBint;
+	wire ADBST0 = ~via_pb_oe[4] | via_pb_o[4];
+	wire ADBST1 = ~via_pb_oe[5] | via_pb_o[5];
+	wire ADBListen;
+
+	reg VIAShiftClk;
+	reg [10:0] VIAShiftClkCount;
+	reg VIATransmitting, VIAWaitReceiving, VIAReceiving;
+	reg [2:0] VIAShiftBitcnt;
 
 	wire cb2_i = kbddata_o;
 	wire cb2_o, cb2_t;
-	wire kbddat_i = ~cb2_t | cb2_o;
+	wire kbddat_i = ~cb2_t | cb2_o /* synthesis keep */;
 	reg kbddata_o;
 	reg  [7:0] kbd_to_mac;
 	reg kbd_data_valid;
@@ -309,69 +315,95 @@ module dataController_top(
 	// Keyboard transmitter-receiver
 	always @(posedge clk32) begin
 		if (clk8_en_p) begin
-			if ((kbd_transmitting && !kbd_wait_receiving) || kbd_receiving) begin
-				kbdclk_count <= kbdclk_count + 1'd1;
-				if (kbdclk_count == 12'd1300) begin // ~165usec
-					kbdclk <= ~kbdclk;
-					kbdclk_count <= 0;
-					if (kbdclk) begin 
+			if ((VIATransmitting && !VIAWaitReceiving) || VIAReceiving) begin
+				VIAShiftClkCount <= VIAShiftClkCount + 1'd1;
+				if (VIAShiftClkCount == (machineType ? 8'd168 : 12'd1300)) begin // ~165usec - Mac Plus / faster - ADB
+					VIAShiftClk <= ~VIAShiftClk;
+					VIAShiftClkCount <= 0;
+					if (VIAShiftClk) begin 
 						// shift before the falling edge
-						if (kbd_transmitting) kbd_out_data <= { kbd_out_data[6:0], kbddat_i };
-						if (kbd_receiving) kbddata_o <= kbd_to_mac[7-kbd_bitcnt];
+						if (VIATransmitting) kbd_out_data <= { kbd_out_data[6:0], kbddat_i };
+						if (VIAReceiving) kbddata_o <= kbd_to_mac[7-VIAShiftBitcnt]; // VIA receives
 					end
 				end
 			end else begin
-				kbdclk_count <= 0;
-				kbdclk <= 1;
+				VIAShiftClkCount <= 0;
+				VIAShiftClk <= 1;
 			end
 		end
 	end
 
 	// Keyboard control
 	always @(posedge clk32) begin
-		reg kbdclk_d;
+		reg VIAShiftClkD;
+		reg ADBatn;
 		if (!_cpuReset) begin
-			kbd_bitcnt <= 0;
-			kbd_transmitting <= 0;
-			kbd_wait_receiving <= 0;
+			VIAShiftBitcnt <= 0;
+			VIATransmitting <= 0;
+			VIAWaitReceiving <= 0;
 			kbd_data_valid <= 0;
+			ADBatn <= machineType;
 		end else if (clk8_en_p) begin
-			if (kbd_in_strobe) begin
+			if (kbd_in_strobe && !machineType) begin
 				kbd_to_mac <= kbd_in_data;
 				kbd_data_valid <= 1;
 			end
 
+			if (adb_dout_strobe && machineType) begin
+				kbd_to_mac <= adb_dout;
+				VIAReceiving <= 1;
+			end
+
 			kbd_out_strobe <= 0;
-			kbdclk_d <= kbdclk;
+			adb_din_strobe <= 0;
+
+			VIAShiftClkD <= VIAShiftClk;
 
 			// Only the Macintosh can initiate communication over the keyboard lines. On
 			// power-up of either the Macintosh or the keyboard, the Macintosh is in
 			// charge, and the external device is passive. The Macintosh signals that it's
 			// ready to begin communication by pulling the keyboard data line low.
-			if (!kbd_transmitting && !kbd_receiving && !kbddat_i) begin
-				kbd_transmitting <= 1;
-				kbd_bitcnt <= 0;
+			if (!machineType && !VIATransmitting && !VIAReceiving && !kbddat_i) begin
+				VIATransmitting <= 1;
+				VIAShiftBitcnt <= 0;
 			end
+
+			// ADB transmission start
+			if (machineType && !VIATransmitting && !VIAReceiving) begin
+				if (kbddat_i) ADBatn <= 1;
+				if (ADBatn && ADBListen) begin
+					ADBatn <= 0;
+					VIATransmitting <= 1;
+					VIAShiftBitcnt <= 0;
+				end
+			end
+
 			// The last bit of the command leaves the keyboard data line low; the
 			// Macintosh then indicates it's ready to receive the keyboard's response by
 			// setting the data line high. 
-			if (kbd_wait_receiving && kbddat_i && kbd_data_valid) begin
-				kbd_wait_receiving <= 0;
-				kbd_receiving <= 1;
-				kbd_transmitting <= 0;
+			if (VIAWaitReceiving && kbddat_i && kbd_data_valid) begin
+				VIAWaitReceiving <= 0;
+				VIAReceiving <= 1;
+				VIATransmitting <= 0;
 			end
 
-			// send/receive bits at rising edge of the keyboard clock
-			if (~kbdclk_d & kbdclk) begin
-				kbd_bitcnt <= kbd_bitcnt + 1'd1;
+			// send/receive bits at rising edge of the keyboard/ADB clock
+			if (~VIAShiftClkD & VIAShiftClk) begin
+				VIAShiftBitcnt <= VIAShiftBitcnt + 1'd1;
 
-				if (kbd_bitcnt == 3'd7) begin
-					if (kbd_transmitting) begin
-						kbd_out_strobe <= 1;
-						kbd_wait_receiving <= 1;
+				if (VIAShiftBitcnt == 3'd7) begin
+					if (VIATransmitting) begin
+						if (!machineType) begin
+							kbd_out_strobe <= 1;
+							VIAWaitReceiving <= 1;
+						end else begin
+							adb_din_strobe <= 1;
+							adb_din <= kbd_out_data;
+							VIATransmitting <= 0;
+						end
 					end
-					if (kbd_receiving) begin
-						kbd_receiving <= 0;
+					if (VIAReceiving) begin
+						VIAReceiving <= 0;
 						kbd_data_valid <= 0;
 					end
 				end
@@ -442,12 +474,18 @@ module dataController_top(
 		.y1(mouseY1),
 		.x2(mouseX2),
 		.y2(mouseY2),
+		.strobe(mouseStrobe),
+		.mouseX(mouseX),
+		.mouseY(mouseY),
 		.button(mouseButton));
 
 	wire [7:0] kbd_in_data;
 	wire kbd_in_strobe;
 	reg  [7:0] kbd_out_data;
 	reg  kbd_out_strobe;
+
+	wire adbKeyStrobe;
+	wire [7:0] adbKeyData;
 
 	// Keyboard
 	ps2_kbd kbd(
@@ -459,6 +497,36 @@ module dataController_top(
 		.data_out(kbd_out_data),              // data from mac
 		.strobe_out(kbd_out_strobe),
 		.data_in(kbd_in_data),         // data to mac
-		.strobe_in(kbd_in_strobe));
+		.strobe_in(kbd_in_strobe),
+		.adbStrobe(adbKeyStrobe),
+		.adbKey(adbKeyData)
+	);
+
+	reg  [7:0] adb_din;
+	reg        adb_din_strobe;
+	wire [7:0] adb_dout;
+	wire       adb_dout_strobe;
+
+	adb adb(
+		.clk(clk32),
+		.clk_en(clk8_en_p),
+		.reset(~_cpuReset),
+		.st({ADBST1, ADBST0}),
+		._int(_ADBint),
+		.viaBusy(VIATransmitting || VIAReceiving),
+		.listen(ADBListen),
+		.adb_din(adb_din),
+		.adb_din_strobe(adb_din_strobe),
+		.adb_dout(adb_dout),
+		.adb_dout_strobe(adb_dout_strobe),
 		
+		.mouseStrobe(mouseStrobe),
+		.mouseX(mouseX),
+		.mouseY(mouseY),
+		.mouseButton(mouseButton),
+
+		.keyStrobe(adbKeyStrobe),
+		.keyData(adbKeyData)
+	);
+
 endmodule

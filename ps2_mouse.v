@@ -18,12 +18,21 @@ module ps2_mouse(input	sysclk,
 	input ps2dat,
 	input ps2clk,
 
+	// quadrature signals for Mac Plus
 	output reg x1,
 	output reg y1,
 	output reg x2,
 	output reg y2,
+
+	// movement values for ADB
+	output strobe,
+	output reg [8:0] mouseX,
+	output reg [8:0] mouseY,
+
 	output reg button
 );
+
+	assign strobe = istrobe && state == ps2m_state_byte2;
 
 	wire 		istrobe;
 	wire [7:0] 	ibyte;
@@ -243,6 +252,19 @@ module ps2_mouse(input	sysclk,
 			  /* Decrement */
 			  if (tick && yacc != 0)
 			    yacc <= yacc + { {9{~yacc[9]}}, 1'b1 };
+		end
+	end
+
+	/* To ADB */
+	always@(posedge sysclk or posedge reset) begin
+		if (reset) begin
+			mouseX <= 0;
+			mouseY <= 0;
+		end else if (clk_en) begin
+			if (istrobe && state == ps2m_state_byte1)
+				mouseX <= {xsign, ibyte};
+			else if (istrobe && state == ps2m_state_byte2)
+				mouseY <= {ysign, ibyte};
 		end
 	end
 endmodule
