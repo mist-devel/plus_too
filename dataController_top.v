@@ -224,6 +224,7 @@ module dataController_top(
 	// VIA
 	wire [2:0] snd_vol;
 	wire snd_ena;
+	wire driveSel; // internal drive select, 0 - upper, 1 - lower
 
 	wire [7:0] via_pa_i, via_pa_o, via_pa_oe;
 	wire [7:0] via_pb_i, via_pb_o, via_pb_oe;
@@ -234,7 +235,8 @@ module dataController_top(
 	//port A
 	assign via_pa_i = {sccWReq, ~via_pa_oe[6:0] | via_pa_o[6:0]};
 	assign snd_vol = ~via_pa_oe[2:0] | via_pa_o[2:0];
-	assign snd_alt = ~(~via_pa_oe[3] | via_pa_o[3]);
+	assign snd_alt = machineType ? 1'b0 : ~(~via_pa_oe[3] | via_pa_o[3]);
+	assign driveSel = machineType ? ~via_pa_oe[4] | via_pa_o[4] : 1'b1;
 	assign memoryOverlayOn = machineType ? SEOverlay : ~via_pa_oe[4] | via_pa_o[4];
 	assign SEL = ~via_pa_oe[5] | via_pa_o[5];
 	assign vid_alt = ~via_pa_oe[6] | via_pa_o[6];
