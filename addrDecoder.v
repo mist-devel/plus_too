@@ -107,20 +107,21 @@ module addrDecoder(
 				if (memoryOverlayOn == 0)
 					selectRAM = !_cpuAS;
 				else begin
-					if (address[23:20] == 0) begin
+					if (address[23:20] == 0 && (!configROMSize[1] || address[19:18] == 0)) begin
 						// Mac Plus: repeated images of overlay ROM only extend to $0F0000
 						// Mac 512K: more repeated ROM images at $020000-$02FFFF
+						// Mac SE:   overlay ROM at $00 0000 - $03 FFFF
 						selectROM = !_cpuAS;
 					end
 				end
 			end
 			4'b0100: begin //40 0000 - 4F FFFF
-				if( configROMSize[1] || address[17] == 1'b0)   // <- this detects SCSI!!!
+				if(configROMSize[1] || address[17] == 1'b0)   // <- this detects SCSI (on Plus)!!!
 					selectROM = !_cpuAS;
 				selectSEOverlay = 1;
 			end
 			4'b0101: begin //50 000 - 5F FFFF
-				if (address[19:12] == 8'h80)
+				if (address[19]) // 58 000 - 5F FFFF
 					selectSCSI = !_cpuAS;
 				selectSEOverlay = 1;
 			end
