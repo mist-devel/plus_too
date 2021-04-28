@@ -13,7 +13,7 @@ module rtc (
 
 	input   [7:0] pramA,
 	input   [7:0] pramDin,
-	output reg [7:0] pramDout,
+	output  [7:0] pramDout,
 	input         pramWr
 );
 
@@ -40,14 +40,19 @@ reg  [31:0] secs;
 // internal RAM
 reg   [7:0] ram[256];
 reg   [7:0] ram_addr;
-reg   [7:0] ram_din, ram_dout;
+reg   [7:0] ram_din, ram_dout, pramDout_r;
 reg         ram_wr;
 reg         ram_dout_strobe, ram_dout_strobeD;
+
+assign pramDout = pramDout_r;
 
 always @(posedge clk) begin
 	ram_dout <= ram[ram_addr];
 	if (ram_wr) ram[ram_addr] <= ram_din;
-	pramDout <= ram[pramA];
+end
+
+always @(posedge clk) begin
+	pramDout_r <= ram[pramA];
 	if (pramWr) ram[pramA] <= pramDin;
 end
 
