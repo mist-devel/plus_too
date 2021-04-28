@@ -54,14 +54,14 @@ always @(posedge clk) begin
 		2'b00: // new command
 		begin
 			if (st_r != 2'b00) listen <= 1;
+			respCnt <= 0;
 			if (adb_din_strobe) begin
 				idleActive <= 1;
-				respCnt <= 0;
 				cmd_r <= cmd;
 				addr_r <= addr;
 				listen <= 0;
 
-				if (addr_r != addr)
+				if (addr_r != addr || cmd_r != cmd)
 					talkTimer <= 0;
 				else
 					talkTimer <= TALKINTERVAL;
@@ -82,7 +82,7 @@ always @(posedge clk) begin
 				if (adb_din_strobe) begin
 					listen <= 0;
 					respCnt <= respCnt + 1'd1;
-					// Listen : TODO
+					// Listen : it's handled in the device specific part
 					// The Listen command is to write to registers, some use cases:
 					// - device ID and device handler writes
 					// - LED status for the keyboard
@@ -96,7 +96,7 @@ always @(posedge clk) begin
 				if (talkTimer != 0)
 					talkTimer <= talkTimer - 1'd1;
 				else begin
-					adb_dout <= 0;
+					adb_dout <= adbReg[15:8];
 					adb_dout_strobe <= 1;
 					talkTimer <= TALKINTERVAL;
 					idleActive <= 0;
@@ -109,7 +109,7 @@ always @(posedge clk) begin
 end
 
 wire   irq = mouseInt | keyboardInt;
-wire   irq_inhibit = (addr_r == addrKeyboard && keyboardValid != 0) || (addr_r == addrMouse && mouseValid != 0);
+wire   irq_inhibit = (addr_r == addrKeyboard && keyboardValid != 0) || (addr_r == addrMouse && mouseValid != 0) || cmd_r[1:0] != 0;
 assign _int = ~(irq && (respCnt == 1 || respCnt == 2)) | irq_inhibit;
 
 // Mouse handler
@@ -209,6 +209,11 @@ always @(posedge clk) begin
 			keyboardInt <= 1;
 
 		if (addr_r == addrKeyboard)	begin
+			if (cmd_r == 4'b1010 && adb_din_strobe && st[1]^st[0]) begin
+				// write into reg2 (keyboard LEDs)
+				if (respCnt == 1) kbdReg2[2:0] <= adb_din[2:0];
+			end
+
 			keyboardInt <= 0;
 
 			if (keyboardValid == 2'b01 && respCnt == 2)
