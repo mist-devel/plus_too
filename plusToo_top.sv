@@ -39,7 +39,7 @@ module plusToo_top(
   input wire            CONF_DATA0  // SPI_SS for user_io
   );
 
-assign LED = ~(dio_download || |(diskAct ^ diskMotor));
+assign LED = ~(dio_download || dio_upload || |(diskAct ^ diskMotor));
 
 // ------------------------------ Plus Too Bus Timing ---------------------------------
 // for stability and maintainability reasons the whole timing has been simplyfied:
@@ -57,10 +57,12 @@ assign LED = ~(dio_download || |(diskAct ^ diskMotor));
 
 // include ROM download helper
 wire dio_download;
+wire dio_upload;
 wire dio_write_i;
 wire [23:0] dio_addr;
 wire [4:0] dio_index;
 wire [7:0] dio_data;
+wire [7:0] dio_din;
 
 // good floppy image sizes are 819200 bytes and 409600 bytes
 reg dsk_int_ds, dsk_ext_ds;  // double sided image inserted
@@ -107,7 +109,9 @@ data_io data_io (
    .SPI_SCK ( SPI_SCK ),
    .SPI_SS2 ( SPI_SS2 ),
    .SPI_DI  ( SPI_DI  ),
+   .SPI_DO  ( SPI_DO  ),
 
+   .ioctl_upload   ( dio_upload ),
    .ioctl_download ( dio_download ),  // signal indicating an active rom download
    .ioctl_index    ( dio_index ),     // 0=rom download, 1=disk image
 
@@ -115,16 +119,17 @@ data_io data_io (
    .clkref_n   ( dio_clkref_n ),
    .ioctl_wr   ( dio_write_i ),
    .ioctl_addr ( dio_addr  ),
-   .ioctl_dout ( dio_data  )
+   .ioctl_dout ( dio_data  ),
+   .ioctl_din  ( dio_din   )
 );
 
-wire dio_clkref_n = ~(~download_cycle & download_cycle_d);
+wire dio_clkref_n = ~(~download_cycle & download_cycle_d) & ~dio_upload;
 reg dio_write;
 reg download_cycle_d;
 always @(posedge clk32) begin
 	download_cycle_d <= download_cycle;
 	if (~dio_clkref_n) dio_write <= 0;
-	if (dio_write_i) begin
+	if (dio_write_i && dio_index != 5'h1F) begin
 		dio_write <= 1;
 		if (dio_index == 0)
 			configROMSize <= {|dio_addr[18:17], dio_addr[18] | (dio_addr[16] & !dio_addr[17])};
@@ -160,6 +165,7 @@ wire [3:0] key = 4'd0;
 		"O4,Memory,1MB,4MB;",
 		"O5,Speed,8MHz,16MHz;",
 		"O67,CPU,FX68K-68000,TG68K-68010,TG68K-68020;",
+		"R256,Save PRAM;",
 		"T0,Reset"
 	};
 
@@ -477,7 +483,13 @@ wire [3:0] key = 4'd0;
 		.sd_buff_addr ( sd_buff_addr ),
 		.sd_buff_dout ( sd_buff_dout ),
 		.sd_buff_din  ( sd_buff_din  ),
-		.sd_buff_wr   ( sd_buff_wr   )
+		.sd_buff_wr   ( sd_buff_wr   ),
+
+		// PRAM upload
+		.pramA        ( dio_addr[7:0]),
+		.pramDin      ( dio_data     ),
+		.pramDout     ( dio_din      ),
+		.pramWr       ( dio_write_i && dio_index == 5'h1F )
 	);
 
 // video output
