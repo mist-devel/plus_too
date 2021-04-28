@@ -89,7 +89,13 @@ module dataController_top(
 	input   [8:0] sd_buff_addr,
 	input   [7:0] sd_buff_dout,
 	output  [7:0] sd_buff_din,
-	input         sd_buff_wr
+	input         sd_buff_wr,
+
+	// PRAM upload
+	input   [7:0] pramA,
+	input   [7:0] pramDin,
+	output  [7:0] pramDout,
+	input         pramWr
 );
 	
 	// add binary volume levels according to volume setting
@@ -290,11 +296,16 @@ module dataController_top(
 	rtc pram (
 		.clk        (clk32),
 		.reset      (!_cpuReset),
+		.xpram      (machineType),
 		.rtc        (rtc),
 		._cs        (_rtccs),
 		.ck         (rtcck),
 		.dat_i      (rtcdat_i),
-		.dat_o      (rtcdat_o)
+		.dat_o      (rtcdat_o),
+		.pramA      (pramA),
+		.pramDin    (pramDin),
+		.pramDout   (pramDout),
+		.pramWr     (pramWr)
 	);
 
 	wire _ADBint;
@@ -521,7 +532,7 @@ module dataController_top(
 		.adb_din_strobe(adb_din_strobe),
 		.adb_dout(adb_dout),
 		.adb_dout_strobe(adb_dout_strobe),
-		
+
 		.mouseStrobe(mouseStrobe),
 		.mouseX(mouseX),
 		.mouseY(mouseY),

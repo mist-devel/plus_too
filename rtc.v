@@ -3,12 +3,18 @@
 module rtc (
 	input         clk,
 	input         reset,
+	input         xpram, // 0 - 20 byte PRAM, 1 - 256 byte XPRAM
 
 	input  [63:0] rtc, // sec, min, hour, date, month, year, day (BCD)
 	input         _cs,
 	input         ck,
 	input         dat_i,
-	output reg    dat_o
+	output reg    dat_o,
+
+	input   [7:0] pramA,
+	input   [7:0] pramDin,
+	output reg [7:0] pramDout,
+	input         pramWr
 );
 
 function [7:0] bcd2bin;
@@ -21,35 +27,35 @@ endfunction
 reg   [2:0] bit_cnt;
 reg         ck_d;
 reg   [7:0] din;
-reg   [7:0] cmd;
+reg         wp;
+reg   [7:0] cmd /* synthesis noprune */;
 reg   [7:0] dout;
 reg         cmd_mode;
+reg   [1:0] xcmd_mode;
+reg   [2:0] xsector;
+reg   [7:0] xaddr;
 reg         receiving;
 reg  [31:0] secs;
-reg   [7:0] ram[20];
+
+// internal RAM
+reg   [7:0] ram[256];
+reg   [7:0] ram_addr;
+reg   [7:0] ram_din, ram_dout;
+reg         ram_wr;
+reg         ram_dout_strobe, ram_dout_strobeD;
+
+always @(posedge clk) begin
+	ram_dout <= ram[ram_addr];
+	if (ram_wr) ram[ram_addr] <= ram_din;
+	pramDout <= ram[pramA];
+	if (pramWr) ram[pramA] <= pramDin;
+end
 
 initial begin
-	ram[5'h00] = 8'hA8;
-	ram[5'h01] = 8'h00;
-	ram[5'h02] = 8'h00;
-	ram[5'h03] = 8'h22;
-	ram[5'h04] = 8'hCC;
-	ram[5'h05] = 8'h0A;
-	ram[5'h06] = 8'hCC;
-	ram[5'h07] = 8'h0A;
-	ram[5'h08] = 8'h00;
-	ram[5'h09] = 8'h00;
-	ram[5'h0A] = 8'h00;
-	ram[5'h0B] = 8'h00;
-	ram[5'h0C] = 8'h00;
-	ram[5'h0D] = 8'h02;
-	ram[5'h0E] = 8'h63;
-	ram[5'h0F] = 8'h00;
-	ram[5'h10] = 8'h03;
-	ram[5'h11] = 8'h88;
-	ram[5'h12] = 8'h00;
-	ram[5'h13] = 8'h6C;
+	$readmemh("pram.hex", ram);
 end
+
+//
 
 integer     sec_cnt;
 
@@ -80,8 +86,12 @@ always @(posedge clk) begin
 		bit_cnt <= 0;
 		receiving <= 1;
 		cmd_mode <= 1;
+		xcmd_mode <= 0;
 		dat_o <= 1;
 		sec_cnt <= 0;
+		ram_dout_strobe <= 0;
+		wp <= 0;
+		ram_wr <= 0;
 	end 
 	else begin
 
@@ -96,11 +106,18 @@ always @(posedge clk) begin
 		        bcd2bin(rtc[23:16]) * 3600 +
 	          days * 3600*24;
 
+		ram_dout_strobe <= 0;
+		ram_dout_strobeD <= ram_dout_strobe;
+		if (ram_dout_strobeD) dout <= ram_dout;
+
+		ram_wr <= 0;
+
 		if (_cs) begin
 			bit_cnt <= 0;
 			receiving <= 1;
 			cmd_mode <= 1;
 			dat_o <= 1;
+			xcmd_mode <= 0;
 		end
 		else begin
 			ck_d <= ck;
@@ -111,13 +128,14 @@ always @(posedge clk) begin
 			// receive at the rising edge of ck
 			if (~ck_d & ck) begin
 				bit_cnt <= bit_cnt + 1'd1;
-				if (receiving)
+				if (receiving || xcmd_mode == 1)
 					din <= {din[6:0], dat_i};
 
 				if (bit_cnt == 7) begin
 					if (receiving && cmd_mode) begin
 						// command byte received
 						cmd_mode <= 0;
+						xcmd_mode <= 0;
 						receiving <= ~din[6];
 						cmd <= {din[6:0], dat_i};
 						casez ({din[5:0], dat_i})
@@ -125,20 +143,38 @@ always @(posedge clk) begin
 							7'b00?0101: dout <= secs[15:8];
 							7'b00?1001: dout <= secs[23:16];
 							7'b00?1101: dout <= secs[31:24];
-							7'b010??01: dout <= ram[{3'b100, din[2:1]}];
-							7'b1????01: dout <= ram[din[4:1]];
+							// 20 byte PRAM mapped to 10h-1fh and 08h-0bh
+							7'b010??01: begin ram_addr <= {3'b010, din[2:1]}; ram_dout_strobe <= 1; end
+							7'b1????01: begin ram_addr <= {1'b1, din[4:1]}; ram_dout_strobe <= 1; end
+							7'b0111???: xcmd_mode <= xpram ? 2'd1 : 2'd0; // XPRAM extended command
 							default: ;
 						endcase
 					end
-					if (receiving && !cmd_mode) begin
+
+					if (xcmd_mode == 1) begin
+						if (receiving) begin
+							xcmd_mode <= 2;
+							xaddr <= {cmd[2:0], din[5:1]};
+						end else begin
+							ram_addr <= {cmd[2:0], din[5:1]};
+							ram_dout_strobe <= 1;
+							xcmd_mode <= 0;
+						end
+					end else if (xcmd_mode == 2) begin
+						ram_addr <= xaddr;
+						ram_din <= {din[6:0], dat_i};
+						ram_wr <= !wp;
+					end else if (receiving && !cmd_mode) begin
 						// data byte received
 						casez (cmd[6:0])
 							7'b0000001: secs[7:0] <= {din[6:0], dat_i};
 							7'b0000101: secs[15:8] <= {din[6:0], dat_i};
 							7'b0001001: secs[23:16] <= {din[6:0], dat_i};
 							7'b0001101: secs[31:24] <= {din[6:0], dat_i};
-							7'b010??01: ram[{3'b100, cmd[3:2]}] <= {din[6:0], dat_i};
-							7'b1????01: ram[cmd[5:2]] <= {din[6:0], dat_i};
+							7'b0110101: wp <= din[6];
+							// 20 byte PRAM mapped to 10h-1fh and 08h-0bh
+							7'b010??01: begin ram_addr <= {3'b010, cmd[3:2]}; ram_din <= {din[6:0], dat_i}; ram_wr <= !wp; end
+							7'b1????01: begin ram_addr <= {1'b1, cmd[5:2]}; ram_din <= {din[6:0], dat_i}; ram_wr <= !wp; end
 							default: ;
 						endcase
 					end
