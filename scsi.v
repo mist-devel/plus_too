@@ -49,15 +49,23 @@ localparam PHASE_STATUS_OUT  = 3'd4;
 localparam PHASE_MESSAGE_OUT = 3'd5;
 reg [2:0]  phase;
 
-// ---------------- buffer read engine -----------------------
-// the buffer itself. Can hold one sector
-reg [7:0] buffer_out [512];
-always @(posedge clk) sd_buff_din <= buffer_out[sd_buff_addr];
+// ------------ sector buffer IO controller read/write -----------------------
+// the buffer itself. Can hold two sectors
+reg sd_buff_sel;
+reg [7:0] buffer [1024];
+always @(posedge clk) begin
+	sd_buff_din <= buffer[{sd_buff_sel, sd_buff_addr}];
+	if(sd_buff_wr) buffer[{sd_buff_sel, sd_buff_addr}] <= sd_buff_dout;
+end
 
-// ---------------- buffer write engine ----------------------
-// the buffer itself. Can hold one sector
-reg [7:0] buffer_in [512];
-always @(posedge clk) if(sd_buff_wr) buffer_in[sd_buff_addr] <= sd_buff_dout;
+reg old_io_ack;
+always @(posedge clk) begin
+	old_io_ack <= io_ack;
+	if (phase == PHASE_IDLE)
+		sd_buff_sel <= 0;
+	else
+		if (old_io_ack & ~io_ack) sd_buff_sel <= !sd_buff_sel;
+end
 
 // -----------------------------------------------------------
 
@@ -73,7 +81,11 @@ reg [7:0]  status;
 assign msg = (phase == PHASE_MESSAGE_OUT);
 assign cd = (phase == PHASE_CMD_IN) || (phase == PHASE_STATUS_OUT) || (phase == PHASE_MESSAGE_OUT);
 assign io = (phase == PHASE_DATA_OUT) || (phase == PHASE_STATUS_OUT) || (phase == PHASE_MESSAGE_OUT);
-assign req = (phase != PHASE_IDLE) && !ack && !io_rd && !io_wr && !io_ack; 
+wire   ready = (phase != PHASE_IDLE) &&
+             !((phase == PHASE_DATA_OUT || phase == PHASE_DATA_IN) && (io_rd || io_ack) && data_cnt[9] == sd_buff_sel) &&
+              !(phase != PHASE_DATA_OUT && phase != PHASE_DATA_IN && (io_wr || io_ack)) /* synthesis keep */;
+assign req = ready && !ack;
+
 assign bsy = (phase != PHASE_IDLE);
 
 assign dout = (phase == PHASE_STATUS_OUT)?status:
@@ -135,7 +147,7 @@ wire [7:0] mode_sense_dout =
 
 // clock data out of buffer to allow for embedded ram
 reg [7:0] buffer_dout;
-always @(posedge clk) buffer_dout <= buffer_in[data_cnt];
+always @(posedge clk) buffer_dout <= buffer[data_cnt];
 
 // buffer to store incoming commands
 reg [3:0]  cmd_cnt;
@@ -143,12 +155,9 @@ reg [7:0]  cmd [9:0];
 
 /* ----------------------- request data from/to io controller ----------------------- */
 
-// base address of current block. Subtract one when writing since the writing happens
-// after a block has been transferred and data_cnt has thus already been increased by 512
-assign io_lba = lba + { 9'd0, data_cnt[31:9] } -
-		(cmd_write ? 32'd1 : 32'd0);
+assign io_lba = lba;
 
-wire req_rd = ((phase == PHASE_DATA_OUT) && cmd_read && (data_cnt[8:0] == 0) && !data_complete);
+wire req_rd = ((phase == PHASE_DATA_OUT) && cmd_read && (data_cnt == 0 || (data_cnt[8:0] == 9'd20 && data_cnt[31:9] != tlen - 1'd1)) && !data_complete);
 wire req_wr = ((((phase == PHASE_DATA_IN) && (data_cnt[8:0] == 0) && (data_cnt != 0)) || (phase == PHASE_STATUS_OUT)) && cmd_write);
 always @(posedge clk) begin
 	reg old_rd, old_wr;
@@ -184,7 +193,7 @@ end
 always @(posedge clk) begin
 	if(stb_ack) begin
 		if(phase == PHASE_CMD_IN)  cmd[cmd_cnt] <= din;
-		if(phase == PHASE_DATA_IN) buffer_out[data_cnt] <= din;
+		if(phase == PHASE_DATA_IN) buffer[data_cnt] <= din;
 	end
 end
 
@@ -274,6 +283,7 @@ reg [31:0] lba;
 reg [15:0] tlen;
 
 always @(posedge clk) begin
+	if (old_io_ack & ~io_ack) lba <= lba + 1'd1;
 	if(cmd_cpl && (phase == PHASE_CMD_IN)) begin
 		lba <= cmd6_cpl?{11'd0, lba6}:lba10;
 		tlen <= cmd6_cpl?{7'd0, tlen6}:tlen10;
