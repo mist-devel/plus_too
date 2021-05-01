@@ -177,11 +177,11 @@ module dataController_top(
 	// SCSI
 	ncr5380 scsi(
 		.clk(clk32),
-		.ce(clk8_en_p),
 		.reset(!_cpuReset),
 		.bus_cs(selectSCSI),
-		.bus_we(!_cpuRW),
 		.bus_rs(cpuAddrRegMid),
+		.ior(!_cpuUDS),
+		.iow(!_cpuLDS),
 		.dack(cpuAddrRegHi[0]),   // A9
 		.wdata(cpuDataIn[15:8]),
 		.rdata(scsiDataOut),

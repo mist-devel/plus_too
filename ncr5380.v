@@ -45,21 +45,20 @@
 module ncr5380
 (
 	input    		clk,
-	input    		ce,
-
 	input 	     	reset,
 
 	/* Bus interface. 3-bit address, to be wired
 	 * appropriately upstream (to A4..A6) plus one
 	 * more bit (A9) wired as dack.
 	 */
-	input 	     bus_cs,
-	input 	     bus_we,
+	input 	      bus_cs,
 	input   [2:0] bus_rs,
-	input 	     dack,
+	input         ior,
+	input         iow,
+	input         dack,
+	output        dreq,
 	input   [7:0] wdata,
 	output  [7:0] rdata,
-
 
 	// connections to io controller
 	input   [1:0] img_mounted,
@@ -76,6 +75,7 @@ module ncr5380
 	output  [7:0] sd_buff_din,
 	input         sd_buff_wr
 );
+	assign dreq = scsi_req & dma_en;
 
 	reg  [7:0] mr;        /* Mode Register */
 	reg  [7:0] icr;       /* Initiator Command Register */
@@ -87,7 +87,6 @@ module ncr5380
 	*/
 	wire [7:0] din;
 	reg  [7:0] dout;
-	reg        dphase;
 	reg        dma_en;
 
 	/* --- Main host-side interface --- */
@@ -96,25 +95,29 @@ module ncr5380
 	reg dma_rd;
 	reg dma_wr;
 	reg reg_wr;
+	reg dma_ack;
 
-	wire i_dma_rd = bus_cs &  dack & ~bus_we;
-	wire i_dma_wr = bus_cs &  dack &  bus_we;
-	wire i_reg_wr = bus_cs & ~dack &  bus_we;
+	wire i_dma_rd = bus_cs &  dack & ior;
+	wire i_dma_wr = bus_cs &  dack & iow;
+	wire i_reg_wr = bus_cs & ~dack & iow;
 
 	always @(posedge clk) begin
-		reg old_dma_rd, old_dma_wr, old_reg_wr;
+		reg old_dma_rd, old_dma_wr, old_reg_wr, old_dack;
 
 		old_dma_rd <= i_dma_rd;
 		old_dma_wr <= i_dma_wr;
 		old_reg_wr <= i_reg_wr;
+		old_dack   <= dack;
 
 		dma_rd <= 0;
 		dma_wr <= 0;
+		dma_ack <= 0;
 		reg_wr <= 0;
 
 		if(~old_dma_wr & i_dma_wr) dma_wr <= 1;
-		else if(~old_dma_rd & i_dma_rd) dma_rd <= 1;
-		else if(~old_reg_wr & i_reg_wr) reg_wr <= 1;
+		if(~old_dma_rd & i_dma_rd) dma_rd <= 1;
+		if(~old_reg_wr & i_reg_wr) reg_wr <= 1;
+		if((old_dma_wr & ~i_dma_wr) | (old_dma_rd & ~i_dma_rd)) dma_ack <= dma_en;
 	end
 
 	/* System bus reads */
@@ -129,45 +132,20 @@ module ncr5380
 	               bus_rs == `RREG_RST ? 8'hff            :
 	               8'hff;
 
-   /* DMA handhsaking logic. Two phase logic, in phase 0
-    * DRQ follows SCSI _REQ until we see DACK. In phase 1
-    * we just wait for SCSI _REQ to go down and go back to
-    * phase 0. We assert SCSI _ACK in phase 1.
-    */
-	always@(posedge clk or posedge reset) begin
-		if (reset) begin
-			dphase <= 0;
-		end else begin
-			if (!dma_en) begin
-				dphase <= 0;
-			end else if (dphase == 0) begin
-				/* Be careful to do that in bus phase 1,
-				* not phase 0, or we would incorrectly
-				* assert bus_hold and lock up the system
-				*/
-				if ((dma_rd || dma_wr) && scsi_req) begin
-					dphase <= 1;
-				end
-			end else if (!scsi_req) begin
-				dphase <= 0;
-			end
-		end
-	end
-   
 	/* Data out latch (in DMA mode, this is one cycle after we've
 	* asserted ACK)
 	*/
 	always@(posedge clk) if((reg_wr && bus_rs == `WREG_ODR) || dma_wr) dout <= wdata;
-   
+
 	/* Current data register. Simplified logic: We loop back the
 	* output data if we are asserting the bus, else we get the
 	* input latch
     */
 	wire [7:0] cur_data = out_en ? dout : din;
-   
+
 	/* Logic for "asserting the bus" simplified */
 	wire       out_en = icr[`ICR_A_DATA] | mr[`MR_ARB];
-   
+
 	/* ICR read wires */
 	wire [7:0] icr_read = { icr[`ICR_A_RST],
 	                        icr_aip,
@@ -247,9 +225,6 @@ module ncr5380
 	/* Remains of simplified arbitration logic */
 	wire icr_aip = mr[`MR_ARB];
 	wire icr_la = 0;
-
-	reg 	dma_ack;
-	always @(posedge clk) if(ce) dma_ack <= dphase;
 
 	/* Other ORed SCSI signals */
 	wire scsi_sel = icr[`ICR_A_SEL];
