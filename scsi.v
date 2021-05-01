@@ -38,16 +38,15 @@ module scsi
 	input            sd_buff_wr
 );
 
-   
 // SCSI device id
 parameter [7:0] ID = 0; 
 
-`define PHASE_IDLE        3'd0
-`define PHASE_CMD_IN      3'd1
-`define PHASE_DATA_OUT    3'd2
-`define PHASE_DATA_IN     3'd3
-`define PHASE_STATUS_OUT  3'd4
-`define PHASE_MESSAGE_OUT 3'd5
+localparam PHASE_IDLE        = 3'd0;
+localparam PHASE_CMD_IN      = 3'd1;
+localparam PHASE_DATA_OUT    = 3'd2;
+localparam PHASE_DATA_IN     = 3'd3;
+localparam PHASE_STATUS_OUT  = 3'd4;
+localparam PHASE_MESSAGE_OUT = 3'd5;
 reg [2:0]  phase;
 
 // ---------------- buffer read engine -----------------------
@@ -71,15 +70,15 @@ reg [7:0]  status;
 `define MSG_CMD_COMPLETE 8'h00
 	
 // drive scsi signals according to phase
-assign msg = (phase == `PHASE_MESSAGE_OUT);
-assign cd = (phase == `PHASE_CMD_IN) || (phase == `PHASE_STATUS_OUT) || (phase == `PHASE_MESSAGE_OUT);
-assign io = (phase == `PHASE_DATA_OUT) || (phase == `PHASE_STATUS_OUT) || (phase == `PHASE_MESSAGE_OUT);
-assign req = (phase != `PHASE_IDLE) && !ack && !io_rd && !io_wr && !io_ack; 
-assign bsy = (phase != `PHASE_IDLE);
+assign msg = (phase == PHASE_MESSAGE_OUT);
+assign cd = (phase == PHASE_CMD_IN) || (phase == PHASE_STATUS_OUT) || (phase == PHASE_MESSAGE_OUT);
+assign io = (phase == PHASE_DATA_OUT) || (phase == PHASE_STATUS_OUT) || (phase == PHASE_MESSAGE_OUT);
+assign req = (phase != PHASE_IDLE) && !ack && !io_rd && !io_wr && !io_ack; 
+assign bsy = (phase != PHASE_IDLE);
 
-assign dout = (phase == `PHASE_STATUS_OUT)?status:
-	 (phase == `PHASE_MESSAGE_OUT)?`MSG_CMD_COMPLETE:
-	 (phase == `PHASE_DATA_OUT)?cmd_dout:
+assign dout = (phase == PHASE_STATUS_OUT)?status:
+	 (phase == PHASE_MESSAGE_OUT)?`MSG_CMD_COMPLETE:
+	 (phase == PHASE_DATA_OUT)?cmd_dout:
 	 8'h00;
 
 // de-multiplex different data sources
@@ -149,8 +148,8 @@ reg [7:0]  cmd [9:0];
 assign io_lba = lba + { 9'd0, data_cnt[31:9] } -
 		(cmd_write ? 32'd1 : 32'd0);
 
-wire req_rd = ((phase == `PHASE_DATA_OUT) && cmd_read && (data_cnt[8:0] == 0) && !data_complete);
-wire req_wr = ((((phase == `PHASE_DATA_IN) && (data_cnt[8:0] == 0) && (data_cnt != 0)) || (phase == `PHASE_STATUS_OUT)) && cmd_write);
+wire req_rd = ((phase == PHASE_DATA_OUT) && cmd_read && (data_cnt[8:0] == 0) && !data_complete);
+wire req_wr = ((((phase == PHASE_DATA_IN) && (data_cnt[8:0] == 0) && (data_cnt != 0)) || (phase == PHASE_STATUS_OUT)) && cmd_write);
 always @(posedge clk) begin
 	reg old_rd, old_wr;
 
@@ -184,15 +183,15 @@ end
 // store data on rising edge of ack, ...
 always @(posedge clk) begin
 	if(stb_ack) begin
-		if(phase == `PHASE_CMD_IN)  cmd[cmd_cnt] <= din;
-		if(phase == `PHASE_DATA_IN) buffer_out[data_cnt] <= din;
+		if(phase == PHASE_CMD_IN)  cmd[cmd_cnt] <= din;
+		if(phase == PHASE_DATA_IN) buffer_out[data_cnt] <= din;
 	end
 end
 
 // ... advance counter on falling edge
 always @(posedge clk) begin
-	if(phase == `PHASE_IDLE) cmd_cnt <= 4'd0;
-	else if(stb_adv && (phase == `PHASE_CMD_IN) && (cmd_cnt != 15)) cmd_cnt <= cmd_cnt + 4'd1;
+	if(phase == PHASE_IDLE) cmd_cnt <= 4'd0;
+	else if(stb_adv && (phase == PHASE_CMD_IN) && (cmd_cnt != 15)) cmd_cnt <= cmd_cnt + 4'd1;
 end
 
 // count data bytes. don't increase counter while we are waiting for data from
@@ -212,7 +211,7 @@ wire [31:0] data_len =
 		 { 16'd0, tlen };                 // inquiry etc have length in bytes
 
 always @(posedge clk) begin
-	if((phase != `PHASE_DATA_OUT) && (phase != `PHASE_DATA_IN) && (phase != `PHASE_STATUS_OUT) && (phase != `PHASE_MESSAGE_OUT)) begin
+	if((phase != PHASE_DATA_OUT) && (phase != PHASE_DATA_IN) && (phase != PHASE_STATUS_OUT) && (phase != PHASE_MESSAGE_OUT)) begin
 		data_cnt <= 0;
 		data_complete <= 0;
 	end else begin	
@@ -226,14 +225,14 @@ end
 // check whether status byte has been sent
 reg status_sent;
 always @(posedge clk) begin
-	if(phase != `PHASE_STATUS_OUT) status_sent <= 0;
+	if(phase != PHASE_STATUS_OUT) status_sent <= 0;
 	else if(stb_adv) status_sent <= 1;
 end
 
 // check whether message byte has been sent
 reg message_sent;
 always @(posedge clk) begin
-	if(phase != `PHASE_MESSAGE_OUT) message_sent <= 0;
+	if(phase != PHASE_MESSAGE_OUT) message_sent <= 0;
 	else if(stb_adv) message_sent <= 1;
 end
 
@@ -275,7 +274,7 @@ reg [31:0] lba;
 reg [15:0] tlen;
 
 always @(posedge clk) begin
-	if(cmd_cpl && (phase == `PHASE_CMD_IN)) begin
+	if(cmd_cpl && (phase == PHASE_CMD_IN)) begin
 		lba <= cmd6_cpl?{11'd0, lba6}:lba10;
 		tlen <= cmd6_cpl?{7'd0, tlen6}:tlen10;
 	end
@@ -295,14 +294,14 @@ wire [15:0] tlen10 = { cmd[7], cmd[8] };
 // on the rising edge
 always @(posedge clk) begin
 	if(rst) begin
-		phase <= `PHASE_IDLE;
+		phase <= PHASE_IDLE;
 	end else begin
-		if(phase == `PHASE_IDLE) begin
+		if(phase == PHASE_IDLE) begin
 			if(sel && din[ID])  // own id on bus during selection?
-				phase <= `PHASE_CMD_IN;
+				phase <= PHASE_CMD_IN;
 		end
 
-		else if(phase == `PHASE_CMD_IN) begin
+		else if(phase == PHASE_CMD_IN) begin
 			// check if a full command is in the buffer
 			if(cmd_cpl) begin
 				// is this a supported and valid command?
@@ -313,37 +312,37 @@ always @(posedge clk) begin
 					// continue according to command
 
 					// these commands return data
-					if(cmd_read || cmd_inquiry || cmd_read_capacity || cmd_mode_sense || cmd_read_buffer) phase <= `PHASE_DATA_OUT;
+					if(cmd_read || cmd_inquiry || cmd_read_capacity || cmd_mode_sense || cmd_read_buffer) phase <= PHASE_DATA_OUT;
 					// these commands receive dataa
-					else if(cmd_write || cmd_mode_select || cmd_write_buffer) phase <= `PHASE_DATA_IN;
+					else if(cmd_write || cmd_mode_select || cmd_write_buffer) phase <= PHASE_DATA_IN;
 					// and all other valid commands are just "ok"
-					else phase <= `PHASE_STATUS_OUT;
+					else phase <= PHASE_STATUS_OUT;
 				end else begin
 					// no, report failure
 					status <= `STATUS_CHECK_CONDITION;
-					phase <= `PHASE_STATUS_OUT;
+					phase <= PHASE_STATUS_OUT;
 				end
 			end
 		end
 
-		else if(phase == `PHASE_DATA_OUT) begin
-			if(data_complete) phase <= `PHASE_STATUS_OUT;
+		else if(phase == PHASE_DATA_OUT) begin
+			if(data_complete) phase <= PHASE_STATUS_OUT;
 		end
 
-		else if(phase == `PHASE_DATA_IN) begin
-			if(data_complete) phase <= `PHASE_STATUS_OUT;
+		else if(phase == PHASE_DATA_IN) begin
+			if(data_complete) phase <= PHASE_STATUS_OUT;
 		end
 
-		else if(phase == `PHASE_STATUS_OUT) begin
-			if(status_sent) phase <= `PHASE_MESSAGE_OUT;
+		else if(phase == PHASE_STATUS_OUT) begin
+			if(status_sent) phase <= PHASE_MESSAGE_OUT;
 		end
 
-		else if(phase == `PHASE_MESSAGE_OUT) begin
-			if(message_sent) phase <= `PHASE_IDLE;
+		else if(phase == PHASE_MESSAGE_OUT) begin
+			if(message_sent) phase <= PHASE_IDLE;
 		end
 		
 		else
-			phase <= `PHASE_IDLE;  // should never happen
+			phase <= PHASE_IDLE;  // should never happen
 	end
 end
    
