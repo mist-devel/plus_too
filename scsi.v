@@ -1,5 +1,4 @@
 /* verilator lint_off UNUSED */
-/* verilator lint_off SYNCASYNCNET */
 
 // scsi.v
 // implements a target only scsi device
@@ -26,7 +25,7 @@ module scsi
 
 	// interface to io controller
 	input         img_mounted,
-	input  [23:0] img_blocks,
+	input  [22:0] img_blocks,
 	output [31:0] io_lba,
 	output reg 	  io_rd,
 	output reg 	  io_wr,
@@ -39,7 +38,7 @@ module scsi
 );
 
 // SCSI device id
-parameter [7:0] ID = 0; 
+parameter [2:0] ID = 0;
 
 localparam PHASE_IDLE        = 3'd0;
 localparam PHASE_CMD_IN      = 3'd1;
@@ -117,7 +116,7 @@ wire [7:0] inquiry_dout =
 
 		(data_cnt == 32'd26)?"S":(data_cnt == 32'd27)?"T":
 		(data_cnt == 32'd28)?"2":(data_cnt == 32'd29)?"2":
-		(data_cnt == 32'd30)?"5":(data_cnt == 32'd31)?"N" + ID:	// TESTING. ElectronAsh.
+		(data_cnt == 32'd30)?"5":(data_cnt == 32'd31)?"N" + {5'd0, ID}: // TESTING. ElectronAsh.
 		8'h00;
 
 // output of read capacity command
@@ -125,7 +124,7 @@ wire [7:0] inquiry_dout =
 //wire [31:0] capacity = 32'd1024096;   // 1024000 + 96 blocks = 500MB
 reg [31:0] capacity;
 always @(posedge clk) begin
-	if (img_mounted) capacity <= img_blocks + 8'd96;
+	if (img_mounted) capacity <= {8'd0, img_blocks} + 32'd96;
 end
 
 wire [31:0] capacity_m1 = capacity - 32'd1;
@@ -157,7 +156,7 @@ reg [7:0]  cmd [9:0];
 
 assign io_lba = lba;
 
-wire req_rd = ((phase == PHASE_DATA_OUT) && cmd_read && (data_cnt == 0 || (data_cnt[8:0] == 9'd20 && data_cnt[31:9] != tlen - 1'd1)) && !data_complete);
+wire req_rd = ((phase == PHASE_DATA_OUT) && cmd_read && (data_cnt == 0 || (data_cnt[8:0] == 9'd20 && data_cnt[31:9] != ({7'd0, tlen} - 1'd1))) && !data_complete);
 wire req_wr = ((((phase == PHASE_DATA_IN) && (data_cnt[8:0] == 0) && (data_cnt != 0)) || (phase == PHASE_STATUS_OUT)) && cmd_write);
 always @(posedge clk) begin
 	reg old_rd, old_wr;

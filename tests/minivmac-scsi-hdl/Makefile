@@ -1,7 +1,8 @@
 # Makefile to compile minivmac and link it against verilog
 
 PROJECT=ncr5380
-mk_COptions = -c -Wall -Wmissing-prototypes -Wno-uninitialized -Wundef -Wstrict-prototypes -Os
+#mk_COptions = -c -Wall -Wmissing-prototypes -Wno-uninitialized -Wundef -Wstrict-prototypes -Os
+mk_COptions = -c -Wall -Wno-uninitialized -Os
 
 # all: $(PROJECT).vcd
 

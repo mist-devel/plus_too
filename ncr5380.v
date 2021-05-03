@@ -92,7 +92,6 @@ module ncr5380
 	/* --- Main host-side interface --- */
 
 	/* Register & DMA accesses decodes */
-	reg dma_rd;
 	reg dma_wr;
 	reg reg_wr;
 	reg dma_ack;
@@ -102,20 +101,17 @@ module ncr5380
 	wire i_reg_wr = bus_cs & ~dack & iow;
 
 	always @(posedge clk) begin
-		reg old_dma_rd, old_dma_wr, old_reg_wr, old_dack;
+		reg old_dma_rd, old_dma_wr, old_reg_wr;
 
 		old_dma_rd <= i_dma_rd;
 		old_dma_wr <= i_dma_wr;
 		old_reg_wr <= i_reg_wr;
-		old_dack   <= dack;
 
-		dma_rd <= 0;
 		dma_wr <= 0;
 		dma_ack <= 0;
 		reg_wr <= 0;
 
 		if(~old_dma_wr & i_dma_wr) dma_wr <= 1;
-		if(~old_dma_rd & i_dma_rd) dma_rd <= 1;
 		if(~old_reg_wr & i_reg_wr) reg_wr <= 1;
 		if((old_dma_wr & ~i_dma_wr) | (old_dma_rd & ~i_dma_rd)) dma_ack <= dma_en;
 	end

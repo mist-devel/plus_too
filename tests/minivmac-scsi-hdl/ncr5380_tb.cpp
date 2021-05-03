@@ -1,10 +1,11 @@
+#include <limits>
 #include "Vncr5380.h"
 #include "verilated.h"
 #include "verilated_vcd_c.h"
 
 #include "ncr5380_tb.h"
 
-#define NAME "../hdd.img"
+#define NAME "hdd.img"
 
 extern "C" unsigned long get_cycles();
 
@@ -80,69 +81,77 @@ static VerilatedVcdC* tfp = NULL;
 static int clk = 0;
 static int ack_delay = 0;
 static int byte_cnt = 0;
+static char reading, writing;
 
 static void do_clk(unsigned long n) {
   while(n--) {
-    
+
     // check for io request
     if((top->io_rd)||(top->io_wr)) {
       if(!ack_delay) {
-	if(top->io_rd) {
-	  printf("IO RD %d @ %d\n", top->io_lba, clk);
-	  load_sec(top->io_lba);
-	}
-	if(top->io_wr) {
-	  printf("IO WR %d @ %d\n", top->io_lba, clk);
-	}
-	
-	byte_cnt = 0;
-	ack_delay = 1200;
+        if((top->io_rd & 1) == 1) {
+          printf("IO RD (0) %d @ %d\n", top->io_lba, clk);
+          load_sec(top->io_lba);
+          reading = 1;
+        }
+        if((top->io_rd & 2) == 2) {
+          printf("IO RD (1) %d @ %d\n", top->io_lba, clk);
+          memset(&buffer, 0, 512);
+          reading = 1;
+        }
+        if((top->io_wr & 1) == 1) {
+          printf("IO WR %d @ %d\n", top->io_lba, clk);
+          writing = 1;
+        }
+
+        byte_cnt = 0;
+        ack_delay = 1200;
       }
     }
-    
+
     top->io_ack = (ack_delay == 1);
 
-    if((ack_delay > 1) || ((ack_delay == 1) && (!top->io_rd) && (!top->io_wr)) )
+    if((ack_delay > 1) || ((ack_delay == 1) && !reading && !writing))
       ack_delay--;
 
-    if(ack_delay) {
-      if(top->io_rd && !top->io_din_strobe && (byte_cnt < 512)) {
-	top->io_din = buffer[byte_cnt];
-	top->io_din_strobe = 1;
-      } else if(top->io_wr && !top->io_dout_strobe && (byte_cnt < 512)) {
-	top->io_dout_strobe = 1;
-
+    if(ack_delay == 1) {
+      if(reading && !top->sd_buff_wr && (byte_cnt < 512)) {
+        top->sd_buff_dout = buffer[byte_cnt];
+        top->sd_buff_wr   = 1;
+        top->sd_buff_addr = byte_cnt;
+      } else if(writing && top->sd_buff_addr != byte_cnt && (byte_cnt < 512)) {
+        top->sd_buff_addr = byte_cnt;
       } else {
-	top->io_din_strobe = 0;
-	top->io_dout_strobe = 0;
-	
-	if(byte_cnt != 512) {
-	  if(top->io_wr) {
-	    buffer[byte_cnt] = top->io_dout;
+        top->sd_buff_wr = 0;
 
-	    if(byte_cnt == 511) {
-	      //	      hexdump(buffer, 512, 0);
-	      save_sec(top->io_lba, 1);
-	    }
-	  }
-	  byte_cnt = byte_cnt + 1;
+        if(byte_cnt != 512) {
+          if(writing == 1) {
+            buffer[byte_cnt] = top->sd_buff_din;
 
-	} 
+            if(byte_cnt == 511) {
+              // hexdump(buffer, 512, 0);
+              save_sec(top->io_lba, 1);
+            }
+          }
+          byte_cnt = byte_cnt + 1;
+
+        } else {
+          reading = writing = 0;
+        }
       }
     } else {
-      top->io_din_strobe = 0;
-      top->io_dout_strobe = 0;
+      top->sd_buff_wr = 0;
     }
-      
-    top->eval();
-    tfp->dump(clk++);
-    
-    top->sysclk = 0;
 
     top->eval();
     tfp->dump(clk++);
 
-    top->sysclk = 1; 
+    top->clk = 0;
+
+    top->eval();
+    tfp->dump(clk++);
+
+    top->clk = 1;
 #if 0
     // limit run
     if(clk >= 200000) {
@@ -156,6 +165,8 @@ static void do_clk(unsigned long n) {
 static void verilator_init(void) {
   if(top) return;   // already initialized?
 
+  reading = writing = 0;
+
   //   Verilated::commandArgs(argc, NULL);
   top = new Vncr5380;
   Verilated::traceEverOn(true);
@@ -165,9 +176,10 @@ static void verilator_init(void) {
 
   // reset
   top->reset = 1;
-  top->sysclk = 1;
+  top->clk = 1;
   top->bus_cs = 0;
-  top->bus_we = 0;
+  top->iow = 0;
+  top->ior = 0;
   top->bus_rs = 5;
   top->io_ack = 0;
 
@@ -175,6 +187,12 @@ static void verilator_init(void) {
 
   top->reset = 0;
 
+  do_clk(2);
+
+  top->img_mounted = 1;
+  top->img_size = 21020672;
+  do_clk(2);
+  top->img_mounted = 0;
   do_clk(2);
 }
 
@@ -196,7 +214,8 @@ unsigned int ncr_poll(unsigned int Data, unsigned int WriteMem, unsigned int add
 #endif
   
   top->bus_cs = 1;
-  top->bus_we = WriteMem;
+  top->iow = WriteMem;
+  top->ior = !WriteMem;
   top->dack = (addr >> 9)&1;
   top->bus_rs = (addr >> 4)&7;
   top->wdata = Data;
