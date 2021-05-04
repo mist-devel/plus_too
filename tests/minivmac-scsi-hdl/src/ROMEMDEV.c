@@ -21,6 +21,8 @@
 	the ROM image.
 
 	This code descended from "ROM.c" in vMac by Philip Cummins.
+
+	Support for "Twiggy" Mac by Mathew Hybler.
 */
 
 #ifndef AllFiles
@@ -37,11 +39,9 @@
 	((CurEmMd <= kEmMd_Classic) || (CurEmMd == kEmMd_II) \
 		|| (CurEmMd == kEmMd_IIx))
 
-#define UseLargeScreenHack \
-	(IncludeVidMem \
-	&& (CurEmMd != kEmMd_PB100) \
-	&& (CurEmMd != kEmMd_II) \
-	&& (CurEmMd != kEmMd_IIx))
+#ifndef UseLargeScreenHack
+#define UseLargeScreenHack 0
+#endif
 
 #if UseSonyPatch
 LOCALVAR const ui3b sony_driver[] = {
@@ -182,7 +182,11 @@ LOCALVAR const ui3b my_disk_icon[] = {
 };
 #endif
 
-#if CurEmMd <= kEmMd_128K
+#if CurEmMd <= kEmMd_Twig43
+#define Sony_DriverBase 0x1836
+#elif CurEmMd <= kEmMd_Twiggy
+#define Sony_DriverBase 0x16E4
+#elif CurEmMd <= kEmMd_128K
 #define Sony_DriverBase 0x1690
 #elif CurEmMd <= kEmMd_Plus
 #define Sony_DriverBase 0x17D30
@@ -200,6 +204,16 @@ LOCALPROC Sony_Install(void)
 	ui3p pto = Sony_DriverBase + ROM;
 
 	MyMoveBytes((anyp)sony_driver, (anyp)pto, sizeof(sony_driver));
+#if CurEmMd <= kEmMd_Twiggy
+	do_put_mem_long(pto + 0x14, 0x4469736B);
+		/* 'Disk' instead of 'Sony' */
+#if CurEmMd <= kEmMd_Twig43
+	do_put_mem_word(pto + 0xEA, 0x0C8A);
+#else
+	do_put_mem_word(pto + 0xEA, 0x0B74);
+#endif
+#endif
+
 	pto += sizeof(sony_driver);
 
 	do_put_mem_word(pto, kcom_callcheck);
@@ -220,84 +234,69 @@ LOCALPROC Sony_Install(void)
 #include "SCRNHACK.h"
 	}
 #endif
+
+	(void) pto; /* avoid warning about unused */
 }
 #endif
 
-LOCALFUNC blnr Check_Checksum(ui5r CheckSum1)
-{
-	long int i;
-	ui5b CheckSum2 = 0;
-	ui3p p = 4 + ROM;
+#ifndef DisableRomCheck
+#define DisableRomCheck 1
+#endif
 
-	for (i = (kCheckSumRom_Size - 4) >> 1; --i >= 0; ) {
-		CheckSum2 += do_get_mem_word(p);
-		p += 2;
+#ifndef DisableRamTest
+#define DisableRamTest 1
+#endif
+
+#ifdef CurAltHappyMac
+#include "HPMCHACK.h"
+#endif
+
+#ifdef ln2mtb
+LOCALPROC ROMscrambleForMTB(void)
+{
+	si5r j;
+	ui3p p = ROM;
+	ui3p p2 = ROM + (1 << ln2mtb);
+
+	for (j = kROM_Size / (1 << ln2mtb) / 2; --j >= 0; ) {
+		si5r i;
+
+		for (i = (1 << ln2mtb); --i >= 0; ) {
+			ui3b t0 = *p;
+			ui3b t1 = *p2;
+			*p++ = t1;
+			*p2++ = t0;
+		}
+
+		p += (1 << ln2mtb);
+		p2 += (1 << ln2mtb);
 	}
-	return (CheckSum1 == CheckSum2);
 }
+#endif
 
 GLOBALFUNC blnr ROM_Init(void)
 {
-	ui5r CheckSum = do_get_mem_long(ROM);
-
-	if (! Check_Checksum(CheckSum)) {
-		WarnMsgCorruptedROM();
-	} else
-#if CurEmMd <= kEmMd_128K
-	if (CheckSum == 0x28BA61CE) {
-	} else
-	if (CheckSum == 0x28BA4E50) {
-	} else
-#elif CurEmMd <= kEmMd_Plus
-	if (CheckSum == 0x4D1EEEE1) {
-		/* Mac Plus ROM v 1, 'Lonely Hearts' */
-	} else
-	if (CheckSum == 0x4D1EEAE1) {
-		/* Mac Plus ROM v 2, 'Lonely Heifers' */
-	} else
-	if (CheckSum == 0x4D1F8172) {
-		/* Mac Plus ROM v 3, 'Loud Harmonicas' */
-	} else
-#elif CurEmMd <= kEmMd_SE
-	if (CheckSum == 0xB2E362A8) {
-	} else
-#elif CurEmMd <= kEmMd_SEFDHD
-	if (CheckSum == 0xB306E171) {
-	} else
-#elif CurEmMd <= kEmMd_Classic
-	if (CheckSum == 0xA49F9914) {
-	} else
-#elif CurEmMd <= kEmMd_PB100
-	if (CheckSum == 0x96645F9C) {
-	} else
-#elif CurEmMd <= kEmMd_II
-	if (CheckSum == 0x9779D2C4) {
-	} else
-	if (CheckSum == 0x97221136) {
-		/* accept IIx ROM */
-	} else
-#elif CurEmMd <= kEmMd_IIx
-	if (CheckSum == 0x97221136) {
-	} else
-#endif
-	{
-		WarnMsgUnsupportedROM();
-	}
-	/*
-		Even if ROM is corrupt or unsupported, go ahead and
-		try to run anyway. It shouldn't do any harm.
-	*/
+#if DisableRomCheck
 
 /* skip the rom checksum */
-#if CurEmMd <= kEmMd_128K
-	do_put_mem_word(226 + ROM, 0x6004);
+#if CurEmMd <= kEmMd_Twig43
+	/* no checksum code */
+#elif CurEmMd <= kEmMd_Twiggy
+	do_put_mem_word(0x136 + ROM, 0x6004);
+#elif CurEmMd <= kEmMd_128K
+	do_put_mem_word(0xE2 + ROM, 0x6004);
 #elif CurEmMd <= kEmMd_Plus
-	do_put_mem_word(3450 + ROM, 0x6022);
+	do_put_mem_word(0xD7A + ROM, 0x6022);
 #elif CurEmMd <= kEmMd_Classic
-	do_put_mem_word(7272 + ROM, 0x6008);
+	do_put_mem_word(0x1C68 + ROM, 0x6008);
 #elif (CurEmMd == kEmMd_II) || (CurEmMd == kEmMd_IIx)
 	do_put_mem_word(0x2AB0 + ROM, 0x6008);
 #endif
+
+#endif /* DisableRomCheck */
+
+
+#if DisableRamTest
 
 #if CurEmMd <= kEmMd_128K
 #elif CurEmMd <= kEmMd_Plus
@@ -313,10 +312,20 @@ GLOBALFUNC blnr ROM_Init(void)
 	do_put_mem_word(0x1AA + ROM, 0x6002);
 #endif
 
+#endif /* DisableRamTest */
+
+#ifdef CurAltHappyMac
+	PatchHappyMac();
+#endif
+
 	/* do_put_mem_word(862 + ROM, 0x4E71); */ /* shorten set memory */
 
 #if UseSonyPatch
 	Sony_Install();
+#endif
+
+#ifdef ln2mtb
+	ROMscrambleForMTB();
 #endif
 
 	return trueblnr;

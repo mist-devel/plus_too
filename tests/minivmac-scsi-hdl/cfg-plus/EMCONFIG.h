@@ -39,6 +39,12 @@
 #define Sony_SupportTags 0
 #define Sony_WantChecksumsUpdated 0
 #define Sony_VerifyChecksums 0
+#define CaretBlinkTime 0x03
+#define SpeakerVol 0x07
+#define DoubleClickTime 0x05
+#define MenuBlink 0x03
+#define AutoKeyThresh 0x06
+#define AutoKeyRate 0x03
 
 
 /* the Wire variables are 1/0, not true/false */
@@ -153,8 +159,6 @@ enum {
 
 #define KYBD_ShiftInData VIA1_ShiftOutData
 #define KYBD_ShiftOutData VIA1_ShiftInData
-
-#define kCheckSumRom_Size kROM_Size
 
 #define kExtn_Block_Base 0x00F40000
 #define kExtn_ln2Spc 5

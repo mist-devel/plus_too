@@ -1,5 +1,5 @@
 /*
-	SOUNDGLU.h
+	SGLUALSA.h
 
 	Copyright (C) 2012 Stephan Kochen, Paul C. Pratt
 
@@ -15,7 +15,7 @@
 */
 
 /*
-	SOUND GLUe (for ALSA)
+	Sound GLUe for ALSA
 
 	ALSA sound support by Stephan Kochen.
 */
@@ -1597,7 +1597,7 @@ LOCALPROC MySound_UnInit(void)
 	MyCloseAlsaLib();
 }
 
-GLOBALPROC MySound_EndWrite(ui4r actL)
+GLOBALOSGLUPROC MySound_EndWrite(ui4r actL)
 {
 	if (MySound_EndWrite0(actL)) {
 		ConvertSoundBlockToNative(TheSoundBuffer

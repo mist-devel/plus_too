@@ -5,7 +5,10 @@
 
 #include "ncr5380_tb.h"
 
-#define NAME "hdd.img"
+#define DISKS 2
+#define NAME "hdd%d.img"
+
+static FILE *disks[2];
 
 extern "C" unsigned long get_cycles();
 
@@ -33,45 +36,48 @@ void hexdump(void *data, uint16_t size, uint16_t offset) {
   }
 }
 
-int load_sec(int index) {
-  FILE *dsk = fopen(NAME, "rb");
-  if(!dsk) {
-    printf("unable to open dsk\n");
-    exit(-1);
+static void init_disks() {
+  int i;
+  char name[255];
+  for (i=0; i<DISKS; i++) {
+    snprintf(name, sizeof(name), NAME, i);
+    disks[i] = fopen(name, "r+");
+    if(!disks[i]) {
+      printf("unable to open dsk %d\n", i);
+    }
+  }
+}
+
+static int load_sec(int index, int dno) {
+
+  if (!disks[dno]) {
+    printf("No disk %d\n",dno);
     return 0;
   }
 
-  fseek(dsk, 512*index, SEEK_SET);
-  if(fread(buffer, 512, 1, dsk) != 1) {
+  fseek(disks[dno], 512*index, SEEK_SET);
+  if(fread(buffer, 512, 1, disks[dno]) != 1) {
     printf("unable to read dsk\n");
     
-    fclose(dsk);
     return 0;
   }
   
-  fclose(dsk);
-
   //  hexdump(buffer, 32, 0);
 
   return 1;
 }
 
-void save_sec(int index, int len) {
-  FILE *dsk = fopen(NAME, "r+");
-  if(!dsk) {
-    printf("unable to open dsk\n");
-    exit(-1);
+void save_sec(int index, int len, int dno) {
+  if (!disks[dno]) {
+    printf("No disk %d\n",dno);
     return;
   }
 
-  fseek(dsk, 512*index, SEEK_SET);
-  if(fwrite(buffer, 512, len, dsk) != len) {
+  fseek(disks[dno], 512*index, SEEK_SET);
+  if(fwrite(buffer, 512, len, disks[dno]) != len) {
     printf("unable to write dsk\n");
-    exit(-1);
     return;
   }
-  
-  fclose(dsk);
 }
 
 extern "C" void cpu_stat(void);
@@ -91,12 +97,12 @@ static void do_clk(unsigned long n) {
       if(!ack_delay) {
         if((top->io_rd & 1) == 1) {
           printf("IO RD (0) %d @ %d\n", top->io_lba, clk);
-          load_sec(top->io_lba);
+          load_sec(top->io_lba, 0);
           reading = 1;
         }
         if((top->io_rd & 2) == 2) {
           printf("IO RD (1) %d @ %d\n", top->io_lba, clk);
-          memset(&buffer, 0, 512);
+          load_sec(top->io_lba, 1);
           reading = 1;
         }
         if((top->io_wr & 1) == 1) {
@@ -130,7 +136,7 @@ static void do_clk(unsigned long n) {
 
             if(byte_cnt == 511) {
               // hexdump(buffer, 512, 0);
-              save_sec(top->io_lba, 1);
+              save_sec(top->io_lba, 1, 0);
             }
           }
           byte_cnt = byte_cnt + 1;
@@ -166,6 +172,8 @@ static void verilator_init(void) {
   if(top) return;   // already initialized?
 
   reading = writing = 0;
+
+  init_disks();
 
   //   Verilated::commandArgs(argc, NULL);
   top = new Vncr5380;
