@@ -28,7 +28,7 @@ reg   [3:0] cmd_r;
 reg   [1:0] st_r;
 wire  [1:0] r_r = cmd_r[1:0];
 reg   [3:0] addr_r;
-reg   [2:0] respCnt;
+reg   [3:0] respCnt;
 reg  [16:0] talkTimer;
 reg         idleActive;
 
@@ -53,7 +53,9 @@ always @(posedge clk) begin
 		case (st)
 		2'b00: // new command
 		begin
-			if (st_r != 2'b00) listen <= 1;
+			if (st_r != 2'b00)
+				listen <= 1;
+
 			respCnt <= 0;
 			if (adb_din_strobe) begin
 				idleActive <= 1;
@@ -96,7 +98,7 @@ always @(posedge clk) begin
 				if (talkTimer != 0)
 					talkTimer <= talkTimer - 1'd1;
 				else begin
-					adb_dout <= adbReg[15:8];
+					adb_dout <= 8'hFF;
 					adb_dout_strobe <= 1;
 					talkTimer <= TALKINTERVAL;
 					idleActive <= 0;
@@ -108,13 +110,16 @@ always @(posedge clk) begin
 	end
 end
 
-wire   irq = mouseInt | keyboardInt;
-wire   irq_inhibit = (addr_r == addrKeyboard && keyboardValid != 0) || (addr_r == addrMouse && mouseValid != 0) || cmd_r[1:0] != 0;
-assign _int = ~(irq && (respCnt == 1 || respCnt == 2)) | irq_inhibit;
+wire   mouseInt = (addr_r != addrMouse && mouseValid == 2'b01) || (addr_r == addrMouse && respCnt >= 3 && cmd_r == 4'b1100);
+wire   keyboardInt = (addr_r != addrKeyboard && keyboardValid == 2'b01) || (addr_r == addrKeyboard && respCnt >= 3 && cmd_r == 4'b1100);
+wire   irq = mouseInt | keyboardInt | (addr_r != addrKeyboard && addr_r != addrMouse);
+wire   int_inhibit = respCnt < 3 && 
+                     ((addr_r == addrMouse && mouseValid == 2'b01) ||
+					  (addr_r == addrKeyboard && keyboardValid == 2'b01));
+assign _int = ~(irq && (st == 2'b01 || st == 2'b10)) | int_inhibit;
 
 // Mouse handler
 reg  [15:0] mouseReg3;
-reg         mouseInt;
 reg   [6:0] X,Y;
 reg         button;
 reg   [1:0] mouseValid;
@@ -122,7 +127,6 @@ reg   [1:0] mouseValid;
 always @(posedge clk) begin
 	if (reset || cmd_r == 0) begin
 		mouseReg3 <= 16'h6301; // device id: 3 device handler id: 1
-		mouseInt <= 0;
 		X <= 0;
 		Y <= 0;
 		mouseValid <= 0;
@@ -141,14 +145,10 @@ always @(posedge clk) begin
 			mouseValid <= 2'b01;
 		end
 
-		if (addr_r != addrMouse && mouseValid == 2'b01)
-			mouseInt <= 1;
-
 		if (addr_r == addrMouse) begin
-			mouseInt <= 0;
 
-			if (mouseValid == 2'b01 && respCnt == 2)
-				// beginning of mouse data read
+			if (mouseValid == 2'b01 && respCnt == 3)
+				// mouse data sent
 				mouseValid <= 2'b10;
 
 			if ((mouseValid == 2'b10 && st == 2'b00) || cmd_r == 4'b0001) begin
@@ -163,7 +163,6 @@ always @(posedge clk) begin
 end
 
 // Keyboard handler
-reg         keyboardInt;
 reg   [1:0] keyboardValid;
 reg  [15:0] kbdReg0;
 reg  [15:0] kbdReg2;
@@ -177,7 +176,6 @@ always @(posedge clk) begin
 		kbdReg2 <= 16'hFFFF;
 		kbdReg3 <= 16'h6202; // device id: 2 device handler id: 2
 		keyboardValid <= 0;
-		keyboardInt <= 0;
 		kbdFifoRd <= 0;
 		kbdFifoWr <= 0;
 	end else if (clk_en) begin
@@ -204,17 +202,11 @@ always @(posedge clk) begin
 			kbdFifoRd <= kbdFifoRd + 1'd1;
 		end
 
-		// Issue an interrupt if there's a valid key, but the keyboard is deselected
-		if (addr_r != addrKeyboard && keyboardValid == 2'b01)
-			keyboardInt <= 1;
-
 		if (addr_r == addrKeyboard)	begin
 			if (cmd_r == 4'b1010 && adb_din_strobe && st[1]^st[0]) begin
 				// write into reg2 (keyboard LEDs)
 				if (respCnt == 1) kbdReg2[2:0] <= adb_din[2:0];
 			end
-
-			keyboardInt <= 0;
 
 			if (keyboardValid == 2'b01 && respCnt == 2)
 				// Beginning of keyboard data read
@@ -278,7 +270,7 @@ end
 // 7-0   Device Handler ID
 
 always @(*) begin
-	adbReg = 0;
+	adbReg = 16'hFFFF;
 	if (addr_r == addrKeyboard) begin
 		case (r_r)
 		2'b00: adbReg = kbdReg0;
