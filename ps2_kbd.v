@@ -815,7 +815,7 @@ module ps2_kbd(
 			  9'h004:		adbKey[6:0] <= 7'h63;	//F3
 			  9'h005:		adbKey[6:0] <= 7'h7A;	//F1
 			  9'h006:		adbKey[6:0] <= 7'h78;	//F2
-			  9'h007:		adbKey[6:0] <= 7'h6F;	//F12 <OSD>
+			  9'h007:		adbKey[6:0] <= 7'h7F;//7'h6F;	//F12 <OSD>
 			  9'h008:		adbKey[6:0] <= 7'h7F;
 			  9'h009:		adbKey[6:0] <= 7'h6D;	//F10
 			  9'h00a:		adbKey[6:0] <= 7'h64;	//F8
@@ -1178,7 +1178,7 @@ module ps2_kbd(
 			  9'h16f:		adbKey[6:0] <= 7'h7F;
 			  9'h170:		adbKey[6:0] <= 7'h72;	//INSERT = HELP
 			  9'h171:		adbKey[6:0] <= 7'h75;	//DELETE (KP clear?)
-			  9'h172:		adbKey[6:0] <= 7'h3C;	//ARROW DOWN
+			  9'h172:		adbKey[6:0] <= 7'h3D;	//ARROW DOWN
 			  9'h173:		adbKey[6:0] <= 7'h7F;
 			  9'h174:		adbKey[6:0] <= 7'h3C;	//ARROW RIGHT
 			  9'h175:		adbKey[6:0] <= 7'h3E;	//ARROW UP
@@ -1321,8 +1321,16 @@ module ps2_kbd(
 			  9'h1fe:		adbKey[6:0] <= 7'h7F;
 			  9'h1ff:		adbKey[6:0] <= 7'h7F;
 			endcase // case ({extended,ps2key[7:0]})
-			adbKey[7] <= keybreak;
-			adbStrobe <= 1;
+			if ({extended, ibyte} == 9'h058) begin
+				// CAPS LOCK
+				if (!keybreak) begin
+					adbKey[7] <= capslock;
+					adbStrobe <= 1;
+				end
+			end else begin
+				adbKey[7] <= keybreak;
+				adbStrobe <= 1;
+			end
 		end else if (clk_en)
 			adbStrobe <= 0;
 
