@@ -330,7 +330,7 @@ module dataController_top(
 		if (clk8_en_p) begin
 			if ((VIATransmitting && !VIAWaitReceiving) || VIAReceiving) begin
 				VIAShiftClkCount <= VIAShiftClkCount + 1'd1;
-				if (VIAShiftClkCount == (machineType ? 8'd168 : 12'd1300)) begin // ~165usec - Mac Plus / faster - ADB
+				if (VIAShiftClkCount == (machineType ? 8'd127 : 12'd1300)) begin // ~165usec - Mac Plus / faster - ADB
 					VIAShiftClk <= ~VIAShiftClk;
 					VIAShiftClkCount <= 0;
 					if (VIAShiftClk) begin 
@@ -346,16 +346,16 @@ module dataController_top(
 		end
 	end
 
-	// Keyboard control
+	// Keyboard/ADB control
 	always @(posedge clk32) begin
 		reg VIAShiftClkD;
-		reg ADBatn;
+		reg ADBListenD;
 		if (!_cpuReset) begin
 			VIAShiftBitcnt <= 0;
 			VIATransmitting <= 0;
 			VIAWaitReceiving <= 0;
 			kbd_data_valid <= 0;
-			ADBatn <= machineType;
+			ADBListenD <= 0;
 		end else if (clk8_en_p) begin
 			if (kbd_in_strobe && !machineType) begin
 				kbd_to_mac <= kbd_in_data;
@@ -383,9 +383,8 @@ module dataController_top(
 
 			// ADB transmission start
 			if (machineType && !VIATransmitting && !VIAReceiving) begin
-				if (kbddat_i) ADBatn <= 1;
-				if (ADBatn && ADBListen) begin
-					ADBatn <= 0;
+				ADBListenD <= ADBListen;
+				if (!ADBListenD && ADBListen) begin
 					VIATransmitting <= 1;
 					VIAShiftBitcnt <= 0;
 				end
