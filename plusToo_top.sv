@@ -247,7 +247,7 @@ wire [3:0] key = 4'd0;
 	wire clk8_en_p, clk8_en_n;
 	wire clk16_en_p, clk16_en_n;
 	wire _cpuVMA, _cpuVPA, _cpuDTACK;
-	wire E_rising, E_falling;
+	wire E_CPU_p, E_CPU_n;
 	wire [2:0] _cpuIPL;
 	wire [2:0] cpuFC;
 	wire [7:0] cpuAddrHi;
@@ -297,11 +297,38 @@ wire [3:0] key = 4'd0;
 		end
 	end
 
-	assign      _cpuVPA = (cpuFC == 3'b111) ? 1'b0 : ~(!_cpuAS && cpuAddr[23:21] == 3'b111);
-	assign      _cpuDTACK = ~(!_cpuAS && cpuAddr[23:21] != 3'b111) | (status_turbo & !turbo_dtack_en);
+	// artificial E clock and VIA dtack generation for turbo mode
+	reg [4:0] E_cnt;
+	wire E_GLUE_p = clk16_en_n & E_cnt == 10;
+	wire E_GLUE_n = clk16_en_n & E_cnt == 18;
+	reg  dtackVIA;
+
+	always @(posedge clk32) begin
+		if (!_cpuReset) begin
+			E_cnt <= 0;
+			dtackVIA <= 0;
+		end
+		else begin
+			if (_cpuAS) dtackVIA <= 0;
+			if (clk16_en_n) begin
+				E_cnt <= E_cnt + 1'd1;
+				if (E_cnt == 19) E_cnt <= 0;
+				if (!_cpuAS && cpuAddr[23:21] == 3'b111 && E_cnt == 17 && speed) dtackVIA <= 1;
+			end
+		end
+	end
+
+	// VPA is asserted on interrupt acknowledge or VIA select in non-turbo mode
+	assign      _cpuVPA = (cpuFC == 3'b111) ? 1'b0 : ~(!_cpuAS && cpuAddr[23:21] == 3'b111 && !speed);
+	assign      _cpuDTACK = ~(!_cpuAS && (cpuAddr[23:21] != 3'b111 || dtackVIA)) | (speed & !turbo_dtack_en);
+
+	wire        _VMA = speed ? !dtackVIA : _cpuVMA;
 
 	wire        cpu_en_p      = speed ? clk16_en_p : clk8_en_p;
 	wire        cpu_en_n      = speed ? clk16_en_n : clk8_en_n;
+
+	wire        E_rising  = speed ? E_GLUE_p : E_CPU_p;
+	wire        E_falling = speed ? E_GLUE_n : E_CPU_n;
 
 	cpu_module cpu_module (
 		.clk         ( clk32        ),
@@ -318,9 +345,8 @@ wire [3:0] key = 4'd0;
 		.cpuFC       ( cpuFC        ),
 		._cpuReset_o ( _cpuReset_o  ),
 
-		.E_div       ( status_turbo ),
-		.E_rising    ( E_rising     ),
-		.E_falling   ( E_falling    ),
+		.E_rising    ( E_CPU_p      ),
+		.E_falling   ( E_CPU_n      ),
 		._cpuVMA     ( _cpuVMA      ),
 		._cpuVPA     ( _cpuVPA      ),
 
@@ -342,7 +368,7 @@ wire [3:0] key = 4'd0;
 		._cpuLDS(_cpuLDS),
 		._cpuRW(_cpuRW),
 		._cpuAS(_cpuAS),
-		.turbo (status_turbo),
+		.turbo (speed),
 		.configROMSize(configROMSize), 
 		.configRAMSize(configRAMSize), 
 		.memoryAddr(memoryAddr),
@@ -424,7 +450,7 @@ wire [3:0] key = 4'd0;
 		._cpuUDS(_cpuUDS), 
 		._cpuLDS(_cpuLDS), 
 		._cpuRW(_cpuRW), 
-		._cpuVMA(_cpuVMA),
+		._cpuVMA(_VMA),
 		.cpuDataIn(cpuDataOut),
 		.cpuDataOut(dataControllerDataOut), 	
 		.cpuAddrRegHi(cpuAddr[12:9]),

@@ -4,3 +4,6 @@
 [submodule "TG68K.C"]
 	path = TG68K.C
 	url = https://github.com/TobiFlex/TG68K.C.git
+[submodule "fx68k"]
+	path = fx68k
+	url = https://github.com/ijor/fx68k.git

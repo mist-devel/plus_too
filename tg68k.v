@@ -18,7 +18,6 @@ module tg68k (
 	output reset_n,
 
 	output reg E,
-	input E_div,
 	output E_PosClkEn,
 	output E_NegClkEn,
 	output vma_n,
@@ -128,26 +127,22 @@ reg Vpai;
 assign vma_n = rVma;
 
 // Internal stop just one cycle before E falling edge
-wire xVma = ~rVma & (eCntr == 8) & en_E;
+wire xVma = ~rVma & (eCntr == 8);
 
-assign E_PosClkEn = (phi2 & (eCntr == 5) & en_E);
-assign E_NegClkEn = (phi2 & (eCntr == 9) & en_E);
-
-reg en_E;
+assign E_PosClkEn = phi2 & (eCntr == 5);
+assign E_NegClkEn = phi2 & (eCntr == 9);
 
 always @( posedge clk) begin
 	if (reset) begin
 		E <= 1'b0;
 		eCntr <=0;
 		rVma <= 1'b1;
-		en_E <= 1'b1;
 	end else begin
 		if (phi1) begin
 			Vpai <= vpa_n;
-			if (E_div) en_E <= !en_E; else en_E <= 1'b1;
 		end
 
-		if (phi2 & en_E) begin
+		if (phi2) begin
 			if (eCntr == 9)
 				E <= 1'b0;
 			else if (eCntr == 5)
@@ -159,9 +154,9 @@ always @( posedge clk) begin
 				eCntr <= eCntr + 1'b1;
 		end
 
-		if (phi2 & s_state != 0 & ~Vpai & (eCntr == 3) & en_E)
+		if (phi2 & s_state != 0 & ~Vpai & (eCntr == 3))
 			rVma <= 1'b0;
-		else if (phi1 & eCntr == 0 & en_E)
+		else if (phi1 & eCntr == 0)
 			rVma <= 1'b1;
 	end
 end

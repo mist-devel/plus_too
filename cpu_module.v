@@ -13,7 +13,6 @@ module cpu_module (
 	output [2:0] cpuFC,
 	output _cpuReset_o,
 
-	input E_div,
 	output E_rising,
 	output E_falling,
 	output _cpuVMA,
@@ -66,7 +65,6 @@ module cpu_module (
 		.LDSn       ( fx68_lds_n ),
 		.UDSn       ( fx68_uds_n ),
 		.E          ( ),
-		.E_div      ( E_div      ),
 		.E_PosClkEn ( fx68_E_falling ),
 		.E_NegClkEn ( fx68_E_rising ),
 		.VMAn       ( fx68_vma_n ),
@@ -120,7 +118,6 @@ module cpu_module (
 		.reset_n    ( tg68_reset_n ),
 
 		.E          (  ),
-		.E_div      ( E_div      ),
 		.E_PosClkEn ( tg68_E_falling ),
 		.E_NegClkEn ( tg68_E_rising  ),
 		.vma_n      ( tg68_vma_n ),
