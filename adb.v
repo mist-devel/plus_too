@@ -118,11 +118,11 @@ wire  [3:0] addrKeyboard = kbdReg3[11:8];
 wire  [3:0] addrMouse = mouseReg3[11:8];
 
 wire   mouseInt = (addr_r != addrMouse && mouseValid == 2'b01);
-wire   keyboardInt = (addr_r != addrKeyboard && keyboardValid == 2'b01);
+wire   keyboardInt = (addr_r != addrKeyboard && (keyboardValid == 1 || keyboardValid == 2));
 wire   irq = mouseInt | keyboardInt | !adbValid;
 wire   int_inhibit = respCnt < 3 && 
                      ((addr_r == addrMouse && mouseValid == 2'b01) ||
-					  (addr_r == addrKeyboard && keyboardValid == 2'b01));
+					  (addr_r == addrKeyboard && (keyboardValid == 1 || keyboardValid == 2)));
 assign _int = ~(irq && (st == 2'b01 || st == 2'b10)) | int_inhibit;
 
 // Mouse handler
@@ -193,7 +193,7 @@ always @(posedge clk) begin
 			kbdFifoWr <= kbdFifoWr + 1'd1;
 		end
 
-		if (kbdFifoWr != kbdFifoRd && keyboardValid == 0) begin
+		if (kbdFifoWr != kbdFifoRd && st == 2'b11 && keyboardValid < 2) begin
 			// Read the FIFO when no other key processing in progress
 			if (kbdReg0[6:0] == kbdFifo[kbdFifoRd][6:0])
 				kbdReg0[7:0] <= kbdFifo[kbdFifoRd];
@@ -205,7 +205,7 @@ always @(posedge clk) begin
 				kbdReg0[15:8] <= kbdFifo[kbdFifoRd];
 
 			// kbdReg0 has a valid key
-			keyboardValid <= 2'b01;
+			keyboardValid <= keyboardValid + 1'd1;
 			kbdFifoRd <= kbdFifoRd + 1'd1;
 		end
 
@@ -215,11 +215,11 @@ always @(posedge clk) begin
 				if (respCnt == 1) kbdReg2[2:0] <= adb_din[2:0];
 			end
 
-			if (keyboardValid == 2'b01 && respCnt == 2)
+			if (keyboardValid != 0 && respCnt == 2)
 				// Beginning of keyboard data read
-				keyboardValid <= 2'b10;
+				keyboardValid <= 2'd3;
 
-			if ((keyboardValid == 2'b10 && st == 2'b00) || cmd_r == 4'b0001) begin
+			if ((keyboardValid == 3 && st == 2'b00) || cmd_r == 4'b0001) begin
 				// Flush keyboard data after read or flush command
 				keyboardValid <= 0;
 				kbdReg0 <= 16'hFFFF;
