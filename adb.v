@@ -35,10 +35,7 @@ reg         idleActive;
 wire  [3:0] cmd = adb_din[3:0];
 wire  [3:0] addr = adb_din[7:4];
 
-reg  [15:0] adbReg;
-
-wire  [3:0] addrKeyboard = kbdReg3[11:8];
-wire  [3:0] addrMouse = mouseReg3[11:8];
+reg         sendResponse;
 
 always @(posedge clk) begin
 	if (reset) begin
@@ -46,9 +43,11 @@ always @(posedge clk) begin
 		idleActive <= 0;
 		cmd_r <= 0;
 		listen <= 0;
+		sendResponse <= 0;
 	end else if (clk_en) begin
 		st_r <= st;
 		adb_dout_strobe <= 0;
+		sendResponse <= 0;
 
 		case (st)
 		2'b00: // new command
@@ -75,10 +74,14 @@ always @(posedge clk) begin
 		begin
 			// Reset, flush, talk
 			if (!viaBusy && (cmd_r[3:1] == 0 || cmd_r[3:2] == 2'b11) && respCnt[0] == st[1]) begin
-				adb_dout <= respCnt[0] ? adbReg[7:0] : adbReg[15:8]; // simplification: only two bytes supported (enough for keyboard/mouse)
-				adb_dout_strobe <= 1;
+				sendResponse <= 1;
 				respCnt <= respCnt + 1'd1;
 			end
+			if (sendResponse) begin
+				adb_dout <= adbReg;
+				adb_dout_strobe <= 1;
+			end
+			// Listen
 			if (st_r != st) listen <= cmd_r[3:2] == 2'b10;
 			if (cmd_r[3:2] == 2'b10 && respCnt[0] == st[1]) begin
 				if (adb_din_strobe) begin
@@ -110,9 +113,13 @@ always @(posedge clk) begin
 	end
 end
 
-wire   mouseInt = (addr_r != addrMouse && mouseValid == 2'b01) || (addr_r == addrMouse && respCnt >= 3 && cmd_r == 4'b1100);
-wire   keyboardInt = (addr_r != addrKeyboard && keyboardValid == 2'b01) || (addr_r == addrKeyboard && respCnt >= 3 && cmd_r == 4'b1100);
-wire   irq = mouseInt | keyboardInt | (addr_r != addrKeyboard && addr_r != addrMouse);
+// Device handlers
+wire  [3:0] addrKeyboard = kbdReg3[11:8];
+wire  [3:0] addrMouse = mouseReg3[11:8];
+
+wire   mouseInt = (addr_r != addrMouse && mouseValid == 2'b01);
+wire   keyboardInt = (addr_r != addrKeyboard && keyboardValid == 2'b01);
+wire   irq = mouseInt | keyboardInt | !adbValid;
 wire   int_inhibit = respCnt < 3 && 
                      ((addr_r == addrMouse && mouseValid == 2'b01) ||
 					  (addr_r == addrKeyboard && keyboardValid == 2'b01));
@@ -269,21 +276,56 @@ end
 // 11-8  Device address
 // 7-0   Device Handler ID
 
+reg  [7:0] adbReg;
+reg        adbValid;
+reg [15:0] talkReg;
+
 always @(*) begin
-	adbReg = 16'hFFFF;
+	adbReg = 8'hFF;
+	adbValid = 0;
+	talkReg = 0;
 	if (addr_r == addrKeyboard) begin
-		case (r_r)
-		2'b00: adbReg = kbdReg0;
-		2'b10: adbReg = kbdReg2;
-		2'b11: adbReg = kbdReg3;
-		default: ;
-		endcase
+		if (cmd_r[3:1] == 0) begin
+			// reset
+			if (respCnt == 0) adbValid = 1;
+		end else begin
+			// talk
+			case (r_r)
+			2'b00: talkReg = kbdReg0;
+			2'b10: talkReg = kbdReg2;
+			2'b11: talkReg = kbdReg3;
+			default: ;
+			endcase
+
+			if (respCnt == 1) begin
+				adbReg = talkReg[15:8];
+				adbValid = 1;
+			end
+			if (respCnt == 2) begin
+				adbReg = talkReg[7:0];
+				adbValid = 1;
+			end
+		end
 	end else if (addr_r == addrMouse) begin
-		case (r_r)
-		2'b00: adbReg = { button, Y, 1'b1, X };
-		2'b11: adbReg = mouseReg3;
-		default: ;
-		endcase
+		if (cmd_r[3:1] == 0) begin
+			// reset
+			if (respCnt == 0) adbValid = 1;
+		end else begin
+			// talk
+			case (r_r)
+			2'b00: talkReg = { button, Y, 1'b1, X };
+			2'b11: talkReg = mouseReg3;
+			default: ;
+			endcase
+			if (respCnt == 1) begin
+				adbReg = talkReg[15:8];
+				adbValid = 1;
+			end
+			if (respCnt == 2) begin
+				adbReg = talkReg[7:0];
+				adbValid = 1;
+			end
+		end
 	end
 end
 
