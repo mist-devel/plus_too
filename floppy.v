@@ -215,8 +215,9 @@ module floppy
 
 	wire lstrbEdge = lstrb == 1'b0 && lstrbPrev == 1'b1;
 
-	assign readData = (driveReadAddr == `DRIVE_REG_RDDATA0 || driveReadAddr == `DRIVE_REG_RDDATA1) ? diskDataIn :
-							{ driveRegsAsRead[driveReadAddr], 7'h00 };
+	assign readData = _enable ? 8'hFF :
+	                  (driveReadAddr == `DRIVE_REG_RDDATA0 || driveReadAddr == `DRIVE_REG_RDDATA1) ? diskDataIn :
+	                  { driveRegsAsRead[driveReadAddr], 7'h00 };
 		
 	// write drive registers
 	wire [2:0] driveWriteAddr = {ca1,ca0,SEL};

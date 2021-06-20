@@ -437,6 +437,7 @@ module dataController_top(
 		.dataIn(cpuDataIn),
 		.cpuAddrRegHi(cpuAddrRegHi),
 		.SEL(SEL),
+		.driveSel(driveSel),
 		.dataOut(iwmDataOut),
 		.insertDisk(insertDisk),
 		.diskSides(diskSides),
