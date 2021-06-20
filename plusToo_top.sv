@@ -41,6 +41,7 @@ module plusToo_top(
 
 assign LED = ~(dio_download || dio_upload || |(diskAct ^ diskMotor));
 
+localparam SCSI_DEVS = 4;
 // ------------------------------ Plus Too Bus Timing ---------------------------------
 // for stability and maintainability reasons the whole timing has been simplyfied:
 //                00           01             10           11
@@ -160,8 +161,10 @@ wire [3:0] key = 4'd0;
 		"PLUS_TOO;;",
 		"F1,DSK;",
 		"F2,DSK;",
-		"S0,IMGVHD,Mount SCSI6;",
-		"S1,IMGVHD,Mount SCSI2;",
+		"S0,IMGVHDHD?,Mount SCSI6;",
+		"S1,IMGVHDHD?,Mount SCSI5;",
+		"S2,IMGVHDHD?,Mount SCSI4;",
+		"S3,IMGVHDHD?,Mount SCSI3;",
 		"O4,Memory,1MB,4MB;",
 		"O5,Speed,8MHz,16MHz;",
 		"O67,CPU,FX68K-68000,TG68K-68010,TG68K-68020;",
@@ -186,18 +189,18 @@ wire [3:0] key = 4'd0;
 	wire [63:0] rtc;
 
 	wire [31:0] io_lba;
-	wire [1:0] io_rd;
-	wire [1:0] io_wr;
+	wire [SCSI_DEVS-1:0] io_rd;
+	wire [SCSI_DEVS-1:0] io_wr;
 	wire       io_ack;
-	wire [1:0] img_mounted;
-	wire [31:0] img_size;
+	wire [SCSI_DEVS-1:0] img_mounted;
+	wire [63:0] img_size;
 	wire [7:0] sd_buff_dout;
 	wire       sd_buff_wr;
 	wire [8:0] sd_buff_addr;
 	wire [7:0] sd_buff_din;
 
 	// include user_io module for arm controller communication
-	user_io #(.STRLEN($size(CONF_STR)>>3)) user_io (
+	user_io #(.STRLEN($size(CONF_STR)>>3), .SD_IMAGES(SCSI_DEVS)) user_io (
 		.clk_sys        ( clk32          ),
 		.clk_sd         ( clk32          ),
 		.conf_str       ( CONF_STR       ),
@@ -437,7 +440,7 @@ wire [3:0] key = 4'd0;
 		.right ( AUDIO_R )
 	);
 
-	dataController_top dc0(
+	dataController_top #(SCSI_DEVS) dc0(
 		.clk32(clk32),
 		.clk8_en_p(clk8_en_p),
 		.clk8_en_n(clk8_en_n),
@@ -500,21 +503,21 @@ wire [3:0] key = 4'd0;
 		.diskAct(diskAct),
 
 		// block device interface for scsi disk
-		.img_mounted  ( img_mounted  ),
-		.img_size     ( img_size     ),
-		.io_lba       ( io_lba       ),
-		.io_rd        ( io_rd        ),
-		.io_wr        ( io_wr        ),
-		.io_ack       ( io_ack       ),
-		.sd_buff_addr ( sd_buff_addr ),
-		.sd_buff_dout ( sd_buff_dout ),
-		.sd_buff_din  ( sd_buff_din  ),
-		.sd_buff_wr   ( sd_buff_wr   ),
+		.img_mounted  ( img_mounted    ),
+		.img_size     ( img_size[40:9] ),
+		.io_lba       ( io_lba         ),
+		.io_rd        ( io_rd          ),
+		.io_wr        ( io_wr          ),
+		.io_ack       ( io_ack         ),
+		.sd_buff_addr ( sd_buff_addr   ),
+		.sd_buff_dout ( sd_buff_dout   ),
+		.sd_buff_din  ( sd_buff_din    ),
+		.sd_buff_wr   ( sd_buff_wr     ),
 
 		// PRAM upload
-		.pramA        ( dio_addr[7:0]),
-		.pramDin      ( dio_data     ),
-		.pramDout     ( dio_din      ),
+		.pramA        ( dio_addr[7:0]  ),
+		.pramDin      ( dio_data       ),
+		.pramDout     ( dio_din        ),
 		.pramWr       ( dio_write_i && dio_index == 5'h1F )
 	);
 

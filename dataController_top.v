@@ -80,11 +80,11 @@ module dataController_top(
 	input dskReadAckExt,
 
 	// connections to io controller
-	input   [1:0] img_mounted,
+	input [SCSI_DEVS-1:0] img_mounted,
 	input  [31:0] img_size,
 	output [31:0] io_lba,
-	output  [1:0] io_rd,
-	output  [1:0] io_wr,
+	output [SCSI_DEVS-1:0] io_rd,
+	output [SCSI_DEVS-1:0] io_wr,
 	input         io_ack,
 	input   [8:0] sd_buff_addr,
 	input   [7:0] sd_buff_dout,
@@ -97,7 +97,9 @@ module dataController_top(
 	output  [7:0] pramDout,
 	input         pramWr
 );
-	
+
+	parameter SCSI_DEVS = 4;
+
 	// add binary volume levels according to volume setting
 	assign audioOut = 
 		(snd_vol[0]?audio_x1:11'd0) +
@@ -175,7 +177,7 @@ module dataController_top(
 	assign memoryDataOut = cpuDataIn;
 
 	// SCSI
-	ncr5380 scsi(
+	ncr5380 #(SCSI_DEVS) scsi(
 		.clk(clk32),
 		.reset(!_cpuReset),
 		.bus_cs(selectSCSI),

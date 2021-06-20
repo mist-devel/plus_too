@@ -61,20 +61,21 @@ module ncr5380
 	output  [7:0] rdata,
 
 	// connections to io controller
-	input   [1:0] img_mounted,
+	input  [DEVS-1:0] img_mounted,
 	input  [31:0] img_size,
 	
-	output [15:0] io_req_type,
-	output [31:0] io_lba,
-	output  [1:0] io_rd,
-	output  [1:0] io_wr,
-	input 	     io_ack,
+	output reg [31:0] io_lba,
+	output [DEVS-1:0] io_rd,
+	output [DEVS-1:0] io_wr,
+	input 	      io_ack,
 
 	input   [8:0] sd_buff_addr,
 	input   [7:0] sd_buff_dout,
-	output  [7:0] sd_buff_din,
+	output reg [7:0] sd_buff_din,
 	input         sd_buff_wr
 );
+	parameter DEVS = 2;
+
 	assign dreq = scsi_req & dma_en;
 
 	reg  [7:0] mr;        /* Mode Register */
@@ -85,7 +86,7 @@ module ncr5380
 	/* Data in and out latches and associated
 	* control logic for DMA
 	*/
-	wire [7:0] din;
+	reg  [7:0] din;
 	reg  [7:0] dout;
 	reg        dma_en;
 
@@ -214,8 +215,9 @@ module ncr5380
    /* BSY logic (simplified arbitration, see notes) */
 	wire scsi_bsy = 
 	    icr[`ICR_A_BSY] |
-	    scsi2_bsy |
-	    scsi6_bsy |
+	    |target_bsy |
+	    //scsi2_bsy |
+	    //scsi6_bsy |
 	    mr[`MR_ARB];
 
 	/* Remains of simplified arbitration logic */
@@ -227,113 +229,81 @@ module ncr5380
 	wire scsi_rst = icr[`ICR_A_RST];
 	wire scsi_ack = icr[`ICR_A_ACK] | dma_ack;
 	wire scsi_atn = icr[`ICR_A_ATN];
-/*
-	wire scsi_cd  = scsi2_cd;
-	wire scsi_io  = scsi2_io;
-	wire scsi_msg = scsi2_msg;
-	wire scsi_req = scsi2_req;
-	
-	assign din = scsi2_dout;
 
-	assign io_lba      = io_lba_2;
-	assign sd_buff_din = sd_buff_din_2;
-*/
-	/* Other trivial lines set by target */
+	/* Mux target signals */
+	reg scsi_cd, scsi_io, scsi_msg, scsi_req;
 
-	wire scsi_cd  = (scsi2_bsy) ? scsi2_cd : scsi6_cd;
-	wire scsi_io  = (scsi2_bsy) ? scsi2_io : scsi6_io;
-	wire scsi_msg = (scsi2_bsy) ? scsi2_msg : scsi6_msg;
-	wire scsi_req = (scsi2_bsy) ? scsi2_req : scsi6_req;
+	always begin
+		integer i;
+		scsi_cd = 0;
+		scsi_io = 0;
+		scsi_msg = 0;
+		scsi_req = 0;
+		din = 8'h55;
+		io_lba = 0;
+		sd_buff_din = 0;
 
-	assign din = scsi2_bsy ? scsi2_dout : 
-	             scsi6_bsy ? scsi6_dout : 
-	             8'h55;
+		for (i = 0; i < DEVS; i = i + 1) begin
+			if (target_bsy[i]) begin
+				scsi_cd = target_cd[i];
+				scsi_io = target_io[i];
+				scsi_msg = target_msg[i];
+				scsi_req = target_req[i];
+				din = target_dout[i];
+				io_lba = target_lba[i];
+				sd_buff_din = target_buff_din[i];
+			end
+		end
+	end
 
-	assign io_lba      = (scsi2_bsy) ? io_lba_2 : io_lba_6;
-	assign sd_buff_din = (scsi2_bsy) ? sd_buff_din_2 : sd_buff_din_6;
-	assign io_req_type = 16'h0000;	// Not used atm. Could be used for CD-ROM sector requests later. ElectronAsh.
+	// input signals from targets
+	wire [DEVS-1:0] target_bsy;
+	wire [DEVS-1:0] target_msg;
+	wire [DEVS-1:0] target_io;
+	wire [DEVS-1:0] target_cd;
+	wire [DEVS-1:0] target_req;
+	wire      [7:0] target_dout[DEVS];
+	wire     [31:0] target_lba[DEVS];
+	wire      [7:0] target_buff_din[DEVS];
 
-	// input signals from target 2
-	wire scsi2_bsy, scsi2_msg, scsi2_io, scsi2_cd, scsi2_req;
-	wire [7:0] scsi2_dout;
+	generate
+		genvar i;
+		for (i = 0; i < DEVS; i = i + 1) begin : target
+			localparam [2:0] ID = 3'd6-i;
+			// connect a target
+			scsi #(.ID(ID)) target
+			(
+				.clk    ( clk ),
+				.rst    ( scsi_rst ),
+				.sel    ( scsi_sel ),
+				.atn    ( scsi_atn ),
 
-	wire [31:0] io_lba_2;
-	wire [7:0] sd_buff_din_2;
+				.ack    ( scsi_ack ),
 
-	// connect a target
-	scsi #(.ID(2)) scsi2
-	(
-		.clk    ( clk ),
-		.rst    ( scsi_rst ),
-		.sel    ( scsi_sel ),
-		.atn    ( scsi_atn ),
-		
-		.ack    ( scsi_ack ),
-		
-		.bsy    ( scsi2_bsy ),
-		.msg    ( scsi2_msg ),
-		.cd     ( scsi2_cd ),
-		.io     ( scsi2_io ),
-		.req    ( scsi2_req ),
-		.dout   ( scsi2_dout ),
-		
-		.din    ( dout ),
+				.bsy    ( target_bsy[i]  ),
+				.msg    ( target_msg[i]  ),
+				.cd     ( target_cd[i]   ),
+				.io     ( target_io[i]   ),
+				.req    ( target_req[i]  ),
+				.dout   ( target_dout[i] ),
 
-		// connection to io controller to read and write sectors
-		// to sd card
-		.img_mounted(img_mounted[1]),
-		.img_blocks(img_size[31:9]),
-		.io_lba ( io_lba_2 ),
-		.io_rd  ( io_rd[1] ),
-		.io_wr  ( io_wr[1] ),
-		.io_ack ( io_ack & scsi2_bsy ),
+				.din    ( dout ),
 
-		.sd_buff_addr( sd_buff_addr ),
-		.sd_buff_dout( sd_buff_dout ),
-		.sd_buff_din( sd_buff_din_2 ),
-		.sd_buff_wr( sd_buff_wr & scsi2_bsy )
-	);
+				// connection to io controller to read and write sectors
+				// to sd card
+				.img_mounted(img_mounted[i]),
+				.img_blocks(img_size),
+				.io_lba ( target_lba[i] ),
+				.io_rd  ( io_rd[i] ),
+				.io_wr  ( io_wr[i] ),
+				.io_ack ( io_ack & target_bsy[i] ),
 
-
-	// input signals from target 6
-	wire scsi6_bsy, scsi6_msg, scsi6_io, scsi6_cd, scsi6_req;
-	wire [7:0] scsi6_dout;
-	
-	wire [31:0] io_lba_6;
-	wire [7:0] sd_buff_din_6;
-
-	scsi #(.ID(6)) scsi6
-	(
-		.clk    ( clk ) ,           // input  clk
-		.rst    ( scsi_rst ) ,      // input  rst
-		.sel    ( scsi_sel ) ,      // input  sel
-		.atn    ( scsi_atn ) ,      // input  atn
-		
-		.ack    ( scsi_ack ) ,      // input  ack
-		
-		.bsy    ( scsi6_bsy ) ,     // output  bsy
-		.msg    ( scsi6_msg ) ,     // output  msg
-		.cd     ( scsi6_cd ) ,      // output  cd
-		.io     ( scsi6_io ) ,      // output  io
-		.req    ( scsi6_req ) ,     // output  req
-		.dout   ( scsi6_dout ) ,    // output [7:0] dout
-
-		.din    ( dout ) ,          // input [7:0] din
-
-		// connection to io controller to read and write sectors
-		// to sd card
-		.img_mounted( img_mounted[0] ),
-		.img_blocks( img_size[31:9] ),
-		.io_lba	( io_lba_6 ) ,		// output [31:0] io_lba
-		.io_rd	( io_rd[0] ) ,		// output  io_rd
-		.io_wr	( io_wr[0] ) ,		// output  io_wr
-		.io_ack	( io_ack & scsi6_bsy ) ,		// input  io_ack
-
-		.sd_buff_addr( sd_buff_addr ) ,	// input [8:0] sd_buff_addr
-		.sd_buff_dout( sd_buff_dout ) ,	// input [7:0] sd_buff_dout
-		.sd_buff_din( sd_buff_din_6 ) ,	// output [7:0] sd_buff_din
-		.sd_buff_wr( sd_buff_wr & scsi6_bsy ) 	// input  sd_buff_wr
-	);
-
+				.sd_buff_addr( sd_buff_addr ),
+				.sd_buff_dout( sd_buff_dout ),
+				.sd_buff_din( target_buff_din[i] ),
+				.sd_buff_wr( sd_buff_wr & target_bsy[i] )
+			);
+		end
+	endgenerate
 
 endmodule

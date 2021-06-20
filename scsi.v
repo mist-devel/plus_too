@@ -25,7 +25,7 @@ module scsi
 
 	// interface to io controller
 	input         img_mounted,
-	input  [22:0] img_blocks,
+	input  [31:0] img_blocks,
 	output [31:0] io_lba,
 	output reg 	  io_rd,
 	output reg 	  io_wr,
@@ -124,7 +124,7 @@ wire [7:0] inquiry_dout =
 //wire [31:0] capacity = 32'd1024096;   // 1024000 + 96 blocks = 500MB
 reg [31:0] capacity;
 always @(posedge clk) begin
-	if (img_mounted) capacity <= {8'd0, img_blocks} + 32'd96;
+	if (img_mounted) capacity <= img_blocks + 32'd96;
 end
 
 wire [31:0] capacity_m1 = capacity - 32'd1;
