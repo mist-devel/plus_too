@@ -123,19 +123,23 @@ wire [7:0] inquiry_dout =
 //wire [31:0] capacity = 32'd41056;   // 40960 + 96 blocks = 20MB
 //wire [31:0] capacity = 32'd1024096;   // 1024000 + 96 blocks = 500MB
 reg [31:0] capacity;
+reg        mounted = 0;
 always @(posedge clk) begin
 	if (img_mounted) begin
-		capacity <= img_blocks + 32'd96;
-		$display("Image mounted on target %d, size: %d", ID, img_blocks);
+		if (|img_blocks) begin
+			capacity <= img_blocks;
+			$display("Image mounted on target %d, size: %d", ID, img_blocks);
+			mounted <= 1;
+		end else
+			mounted <= 0;
 	end
 end
 
-wire [31:0] capacity_m1 = capacity - 32'd1;
 wire [7:0] read_capacity_dout =
-		(data_cnt == 32'd0 )?capacity_m1[31:24]:
-		(data_cnt == 32'd1 )?capacity_m1[23:16]:
-		(data_cnt == 32'd2 )?capacity_m1[15:8]:
-		(data_cnt == 32'd3 )?capacity_m1[7:0]:
+		(data_cnt == 32'd0 )?capacity[31:24]:
+		(data_cnt == 32'd1 )?capacity[23:16]:
+		(data_cnt == 32'd2 )?capacity[15:8]:
+		(data_cnt == 32'd3 )?capacity[7:0]:
 		(data_cnt == 32'd6 )?8'd2:             // 512 bytes per sector
 		8'h00;
 
@@ -311,7 +315,7 @@ always @(posedge clk) begin
 		phase <= PHASE_IDLE;
 	end else begin
 		if(phase == PHASE_IDLE) begin
-			if(sel && din[ID])  // own id on bus during selection?
+			if(sel && din[ID] && mounted)  // own id on bus during selection?
 				phase <= PHASE_CMD_IN;
 		end
 
