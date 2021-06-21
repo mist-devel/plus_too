@@ -274,11 +274,13 @@ wire       cmd_test_unit_ready = (op_code == 8'h00);
 wire       cmd_read_capacity = (op_code == 8'h25);
 wire       cmd_read_buffer = (op_code == 8'h3b);  // fake
 wire       cmd_write_buffer = (op_code == 8'h3c); // fake
+wire       cmd_verify6 = (op_code == 8'h13); // fake
+wire       cmd_verify10 = (op_code == 8'h2f); // fake
 
 // valid command in buffer? TODO: check for valid command parameters
 wire  cmd_ok = cmd_read || cmd_write || cmd_inquiry || cmd_test_unit_ready || 
 		  cmd_read_capacity || cmd_mode_select || cmd_format || cmd_mode_sense ||
-		  cmd_read_buffer | cmd_write_buffer;
+		  cmd_read_buffer || cmd_write_buffer || cmd_verify6 || cmd_verify10;
 
 // latch parameters once command is complete
 reg [31:0] lba;
