@@ -2,7 +2,7 @@
 
 PROJECT=ncr5380
 #MODEL: plus or se
-MODEL=plus
+MODEL=se
 mk_COptions = -c -Wall -Wmissing-prototypes -Wno-uninitialized -Wundef -Wstrict-prototypes -Os  -Icfg-$(MODEL)/ -Isrc/
 
 # all: $(PROJECT).vcd

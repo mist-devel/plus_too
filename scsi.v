@@ -124,7 +124,10 @@ wire [7:0] inquiry_dout =
 //wire [31:0] capacity = 32'd1024096;   // 1024000 + 96 blocks = 500MB
 reg [31:0] capacity;
 always @(posedge clk) begin
-	if (img_mounted) capacity <= img_blocks + 32'd96;
+	if (img_mounted) begin
+		capacity <= img_blocks + 32'd96;
+		$display("Image mounted on target %d, size: %d", ID, img_blocks);
+	end
 end
 
 wire [31:0] capacity_m1 = capacity - 32'd1;
@@ -313,6 +316,7 @@ always @(posedge clk) begin
 		else if(phase == PHASE_CMD_IN) begin
 			// check if a full command is in the buffer
 			if(cmd_cpl) begin
+				$display("New command on target %d: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x", ID, cmd[0], cmd[1], cmd[2], cmd[3], cmd[4], cmd[5], cmd[6], cmd[7], cmd[8], cmd[9]);
 				// is this a supported and valid command?
 				if(cmd_ok) begin
 					// yes, continue

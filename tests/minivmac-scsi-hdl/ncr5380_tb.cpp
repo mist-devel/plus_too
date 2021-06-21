@@ -5,10 +5,12 @@
 
 #include "ncr5380_tb.h"
 
+#define DUMP 0
+
 #define DISKS 2
 #define NAME "hdd%d.img"
 
-static FILE *disks[2];
+static FILE *disks[DISKS];
 
 extern "C" unsigned long get_cycles();
 
@@ -48,14 +50,14 @@ static void init_disks() {
   }
 }
 
-static int load_sec(int index, int dno) {
+static int load_sec(int lba, int dno) {
 
   if (!disks[dno]) {
     printf("No disk %d\n",dno);
     return 0;
   }
 
-  fseek(disks[dno], 512*index, SEEK_SET);
+  fseek(disks[dno], 512*lba, SEEK_SET);
   if(fread(buffer, 512, 1, disks[dno]) != 1) {
     printf("unable to read dsk\n");
     
@@ -67,17 +69,19 @@ static int load_sec(int index, int dno) {
   return 1;
 }
 
-void save_sec(int index, int len, int dno) {
+void save_sec(int lba, int len, int dno) {
   if (!disks[dno]) {
     printf("No disk %d\n",dno);
     return;
   }
 
-  fseek(disks[dno], 512*index, SEEK_SET);
+  fseek(disks[dno], 512*lba, SEEK_SET);
+
   if(fwrite(buffer, 512, len, disks[dno]) != len) {
     printf("unable to write dsk\n");
     return;
   }
+
 }
 
 extern "C" void cpu_stat(void);
@@ -95,21 +99,19 @@ static void do_clk(unsigned long n) {
     // check for io request
     if((top->io_rd)||(top->io_wr)) {
       if(!ack_delay) {
-        if((top->io_rd & 1) == 1) {
-          printf("IO RD (0) %d @ %d\n", top->io_lba, clk);
-          load_sec(top->io_lba, 0);
-          reading = 1;
+        for (int i=0; i<DISKS; i++) {
+          if(top->io_rd & (1<<i)) {
+            printf("IO RD (%d) %d @ %d\n", i, top->io_lba, clk);
+            load_sec(top->io_lba, i);
+            reading = i+1;
+            break;
+          }
+          if(top->io_wr & (1<<i)) {
+            printf("IO WR (%d) %d @ %d\n", i, top->io_lba, clk);
+            writing = i+1;
+            break;
+          }
         }
-        if((top->io_rd & 2) == 2) {
-          printf("IO RD (1) %d @ %d\n", top->io_lba, clk);
-          load_sec(top->io_lba, 1);
-          reading = 1;
-        }
-        if((top->io_wr & 1) == 1) {
-          printf("IO WR %d @ %d\n", top->io_lba, clk);
-          writing = 1;
-        }
-
         byte_cnt = 0;
         ack_delay = 1200;
       }
@@ -131,12 +133,12 @@ static void do_clk(unsigned long n) {
         top->sd_buff_wr = 0;
 
         if(byte_cnt != 512) {
-          if(writing == 1) {
+          if(writing) {
             buffer[byte_cnt] = top->sd_buff_din;
 
             if(byte_cnt == 511) {
               // hexdump(buffer, 512, 0);
-              save_sec(top->io_lba, 1, 0);
+              save_sec(top->io_lba, 1, writing-1);
             }
           }
           byte_cnt = byte_cnt + 1;
@@ -150,13 +152,15 @@ static void do_clk(unsigned long n) {
     }
 
     top->eval();
+#if DUMP
     tfp->dump(clk++);
-
+#endif
     top->clk = 0;
 
     top->eval();
+#if DUMP
     tfp->dump(clk++);
-
+#endif
     top->clk = 1;
 #if 0
     // limit run
@@ -197,10 +201,15 @@ static void verilator_init(void) {
 
   do_clk(2);
 
-  top->img_mounted = 1;
-  top->img_size = 21020672;
-  do_clk(2);
-  top->img_mounted = 0;
+  for (int i=0; i<DISKS; i++) {
+    if (disks[i]) {
+      top->img_mounted = 1<<i;
+      fseek(disks[i], 0L, SEEK_END);
+      top->img_size = ftell(disks[i])/512;
+      do_clk(1);
+      top->img_mounted = 0;
+    }
+  }
   do_clk(2);
 }
 
@@ -229,7 +238,7 @@ unsigned int ncr_poll(unsigned int Data, unsigned int WriteMem, unsigned int add
   top->wdata = Data;
 
   // one clock step
-  do_clk(2);
+  do_clk(4);
 
   top->bus_cs = 0;
 
