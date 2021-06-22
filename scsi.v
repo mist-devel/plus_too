@@ -80,10 +80,11 @@ reg [7:0]  status;
 assign msg = (phase == PHASE_MESSAGE_OUT);
 assign cd = (phase == PHASE_CMD_IN) || (phase == PHASE_STATUS_OUT) || (phase == PHASE_MESSAGE_OUT);
 assign io = (phase == PHASE_DATA_OUT) || (phase == PHASE_STATUS_OUT) || (phase == PHASE_MESSAGE_OUT);
-wire   ready = (phase != PHASE_IDLE) &&
-             !((phase == PHASE_DATA_OUT || phase == PHASE_DATA_IN) && (io_rd || io_ack) && data_cnt[9] == sd_buff_sel) &&
-              !(phase != PHASE_DATA_OUT && phase != PHASE_DATA_IN && (io_wr || io_ack)) /* synthesis keep */;
-assign req = ready && !ack;
+
+wire   io_busy = (phase == PHASE_DATA_OUT && (io_rd | io_ack) && data_cnt[9] == sd_buff_sel) ||
+                 (phase == PHASE_DATA_IN  && (io_wr | io_ack) && data_cnt[9] == sd_buff_sel) ||
+                 (phase != PHASE_DATA_OUT && phase != PHASE_DATA_IN && (io_rd | io_wr | io_ack));
+assign req = (phase != PHASE_IDLE) && !ack && !io_busy;
 
 assign bsy = (phase != PHASE_IDLE);
 
@@ -163,25 +164,36 @@ reg [7:0]  cmd [9:0];
 
 assign io_lba = lba;
 
+// generate an io_rd signal whenever the first byte of a 512 byte block is required
+// start fetching the next sector when the 20th byte is read, and it's not the last sector
 wire req_rd = ((phase == PHASE_DATA_OUT) && cmd_read && (data_cnt == 0 || (data_cnt[8:0] == 9'd20 && data_cnt[31:9] != ({7'd0, tlen} - 1'd1))) && !data_complete);
+
+// generate an io_wr signal whenever a 512 byte block has been received or when the status
+// phase of a write command has been reached
 wire req_wr = ((((phase == PHASE_DATA_IN) && (data_cnt[8:0] == 0) && (data_cnt != 0)) || (phase == PHASE_STATUS_OUT)) && cmd_write);
+
 always @(posedge clk) begin
 	reg old_rd, old_wr;
+	reg wr_pending, rd_pending;
 
 	old_rd <= req_rd;
 	old_wr <= req_wr;
-	
+	if(~old_rd & req_rd) rd_pending <= 1;
+	if(~old_wr & req_wr) wr_pending <= 1;
+
 	if(io_ack) begin
 		io_rd <= 1'b0;
 		io_wr <= 1'b0;
 	end else begin
-		// generate an io_rd signal whenever the first byte of a 512 byte block is required and io_wr whenever
-		// the last byte of a 512 byte block has been revceived
-		if(~old_rd & req_rd) io_rd <= 1;
+		if (rd_pending && !io_rd) begin
+			io_rd <= 1;
+			rd_pending <= 0;
+		end
 
-		// generate an io_wr signal whenever a 512 byte block has been received or when the status
-		// phase of a write command has been reached
-		if(~old_wr & req_wr) io_wr <= 1;
+		if (wr_pending && !io_wr) begin
+			io_wr <= 1;
+			wr_pending <= 0;
+		end
 	end
 end
 
