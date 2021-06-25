@@ -332,7 +332,7 @@ module dataController_top(
 		if (clk8_en_p) begin
 			if ((VIATransmitting && !VIAWaitReceiving) || VIAReceiving) begin
 				VIAShiftClkCount <= VIAShiftClkCount + 1'd1;
-				if (VIAShiftClkCount == (machineType ? 8'd127 : 12'd1300)) begin // ~165usec - Mac Plus / faster - ADB
+				if (VIAShiftClkCount == (machineType ? 8'd80 : 12'd1300)) begin // ~165usec - Mac Plus / faster - ADB
 					VIAShiftClk <= ~VIAShiftClk;
 					VIAShiftClkCount <= 0;
 					if (VIAShiftClk) begin 
