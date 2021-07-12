@@ -120,7 +120,7 @@ set_location_assignment PIN_59 -to SDRAM_nCS
 set_location_assignment PIN_33 -to SDRAM_CKE
 set_location_assignment PIN_43 -to SDRAM_CLK
 
-set_global_assignment -name CYCLONEII_OPTIMIZATION_TECHNIQUE SPEED
+set_global_assignment -name CYCLONEII_OPTIMIZATION_TECHNIQUE BALANCED
 set_global_assignment -name SMART_RECOMPILE ON
 set_global_assignment -name ENABLE_SIGNALTAP OFF
 set_global_assignment -name USE_SIGNALTAP_FILE out/adb.stp
@@ -148,7 +148,7 @@ set_global_assignment -name PARTITION_COLOR 2147039 -section_id Top
 set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
 
 set_global_assignment -name PHYSICAL_SYNTHESIS_ASYNCHRONOUS_SIGNAL_PIPELINING OFF
-set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC_FOR_AREA OFF
+set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC_FOR_AREA ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_MAP_LOGIC_TO_MEMORY_FOR_AREA OFF
 
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY out
@@ -344,6 +344,7 @@ set_global_assignment -name ENABLE_NCE_PIN OFF
 set_global_assignment -name ENABLE_BOOT_SEL_PIN OFF
 set_global_assignment -name VERILOG_SHOW_LMF_MAPPING_MESSAGES OFF
 set_global_assignment -name VERILOG_MACRO "USE_E_CLKEN=<None>"
+set_global_assignment -name VERILOG_MACRO "FX68K_ALTERA_REGS=<None>"
 set_global_assignment -name SDC_FILE plusToo_top.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE plusToo_top.sv
 set_global_assignment -name VERILOG_FILE cpu_module.v
@@ -351,6 +352,7 @@ set_global_assignment -name QIP_FILE "mist-modules/mist.qip"
 set_global_assignment -name SYSTEMVERILOG_FILE fx68k/uaddrPla.sv
 set_global_assignment -name SYSTEMVERILOG_FILE fx68k/fx68kAlu.sv
 set_global_assignment -name SYSTEMVERILOG_FILE fx68k/fx68k.sv
+set_global_assignment -name VERILOG_FILE fx68k/altera_regs.v
 set_global_assignment -name VHDL_FILE TG68K.C/TG68KdotC_Kernel.vhd
 set_global_assignment -name VHDL_FILE TG68K.C/TG68K_Pack.vhd
 set_global_assignment -name VHDL_FILE TG68K.C/TG68K_ALU.vhd
