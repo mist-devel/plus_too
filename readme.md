@@ -21,6 +21,7 @@ itself. Major changes were:
 Functional changes:
 
 - tg68k cpu core updated to latest version
+- selectable FX68K/TG68K CPUs
 - floppy disk images use 400k or 800k dsk format
 - support for second floppy disk
 - SDRAM clock reduced to 65MHz
@@ -32,6 +33,8 @@ Functional changes:
 - Basic sound support
 - SCSI interface + SCSI hdd support
 - CPU Turbo mode (ca factor 2.5)
+- PRAM/RTC support
+- SE model support (with ADB)
 
 Usage
 -----
