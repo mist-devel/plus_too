@@ -1,43 +1,104 @@
-// PlusToo_top for the MIST FPGA board
+module plusToo_top(
+	input         CLOCK_27,
 
-module plusToo_top( 
-  // clock inputs
-  input wire [ 2-1:0]   CLOCK_27, // 27 MHz
-  // LED outputs
-  output wire           LED, // LED Yellow
-  // UART
-  output wire           UART_TX, // UART Transmitter (MIDI out)
-  input wire            UART_RX, // UART Receiver (MIDI in)
-  // VGA
-  output wire           VGA_HS, // VGA H_SYNC
-  output wire           VGA_VS, // VGA V_SYNC
-  output wire [ 6-1:0]  VGA_R, // VGA Red[5:0]
-  output wire [ 6-1:0]  VGA_G, // VGA Green[5:0]
-  output wire [ 6-1:0]  VGA_B, // VGA Blue[5:0]
-  // SDRAM
-  inout wire [ 16-1:0]  SDRAM_DQ, // SDRAM Data bus 16 Bits
-  output wire [ 13-1:0] SDRAM_A, // SDRAM Address bus 13 Bits
-  output wire           SDRAM_DQML, // SDRAM Low-byte Data Mask
-  output wire           SDRAM_DQMH, // SDRAM High-byte Data Mask
-  output wire           SDRAM_nWE, // SDRAM Write Enable
-  output wire           SDRAM_nCAS, // SDRAM Column Address Strobe
-  output wire           SDRAM_nRAS, // SDRAM Row Address Strobe
-  output wire           SDRAM_nCS, // SDRAM Chip Select
-  output wire [ 2-1:0]  SDRAM_BA, // SDRAM Bank Address
-  output wire           SDRAM_CLK, // SDRAM Clock
-  output wire           SDRAM_CKE, // SDRAM Clock Enable
-  // MINIMIG specific
-  output wire           AUDIO_L, // sigma-delta DAC output left
-  output wire           AUDIO_R, // sigma-delta DAC output right
-  // SPI
-  inout wire            SPI_DO,
-  input wire            SPI_DI,
-  input wire            SPI_SCK,
-  input wire            SPI_SS2,    // fpga
-  input wire            SPI_SS3,    // OSD
-  input wire            SPI_SS4,    // "sniff" mode
-  input wire            CONF_DATA0  // SPI_SS for user_io
-  );
+	output        LED,
+	output [VGA_BITS-1:0] VGA_R,
+	output [VGA_BITS-1:0] VGA_G,
+	output [VGA_BITS-1:0] VGA_B,
+	output        VGA_HS,
+	output        VGA_VS,
+
+	input         SPI_SCK,
+	inout         SPI_DO,
+	input         SPI_DI,
+	input         SPI_SS2,
+	input         SPI_SS3,
+	input         CONF_DATA0,
+
+`ifdef USE_QSPI
+	input         QSCK,
+	input         QCSn,
+	inout   [3:0] QDAT,
+`endif
+`ifndef NO_DIRECT_UPLOAD
+	input         SPI_SS4,
+`endif
+
+	output [12:0] SDRAM_A,
+	inout  [15:0] SDRAM_DQ,
+	output        SDRAM_DQML,
+	output        SDRAM_DQMH,
+	output        SDRAM_nWE,
+	output        SDRAM_nCAS,
+	output        SDRAM_nRAS,
+	output        SDRAM_nCS,
+	output  [1:0] SDRAM_BA,
+	output        SDRAM_CLK,
+	output        SDRAM_CKE,
+
+`ifdef DUAL_SDRAM
+	output [12:0] SDRAM2_A,
+	inout  [15:0] SDRAM2_DQ,
+	output        SDRAM2_DQML,
+	output        SDRAM2_DQMH,
+	output        SDRAM2_nWE,
+	output        SDRAM2_nCAS,
+	output        SDRAM2_nRAS,
+	output        SDRAM2_nCS,
+	output  [1:0] SDRAM2_BA,
+	output        SDRAM2_CLK,
+	output        SDRAM2_CKE,
+`endif
+
+	output        AUDIO_L,
+	output        AUDIO_R,
+`ifdef I2S_AUDIO
+	output        I2S_BCK,
+	output        I2S_LRCK,
+	output        I2S_DATA,
+`endif
+
+	input         UART_RX,
+	output        UART_TX
+
+);
+
+`ifdef NO_DIRECT_UPLOAD
+localparam bit DIRECT_UPLOAD = 0;
+wire SPI_SS4 = 1;
+`else
+localparam bit DIRECT_UPLOAD = 1;
+`endif
+
+`ifdef USE_QSPI
+localparam bit QSPI = 1;
+assign QDAT = 4'hZ;
+`else
+localparam bit QSPI = 0;
+`endif
+
+`ifdef VGA_8BIT
+localparam VGA_BITS = 8;
+`else
+localparam VGA_BITS = 6;
+`endif
+
+// remove this if the 2nd chip is actually used
+`ifdef DUAL_SDRAM
+assign SDRAM2_A = 13'hZZZZ;
+assign SDRAM2_BA = 0;
+assign SDRAM2_DQML = 0;
+assign SDRAM2_DQMH = 0;
+assign SDRAM2_CKE = 0;
+assign SDRAM2_CLK = 0;
+assign SDRAM2_nCS = 1;
+assign SDRAM2_DQ = 16'hZZZZ;
+assign SDRAM2_nCAS = 0;
+assign SDRAM2_nRAS = 0;
+assign SDRAM2_nWE = 0;
+`endif
+
+`include "build_id.v"
 
 assign LED = ~(dio_download || dio_upload || |(diskAct ^ diskMotor));
 
@@ -147,7 +208,7 @@ wire [3:0] key = 4'd0;
 	wire clk32;
 
 	pll cs0(
-		.inclk0	( CLOCK_27[0]	),
+		.inclk0	( CLOCK_27),
 		.c0		( clk64			),
 		.c1     ( clk32         ),
 		.locked	( pll_locked	)
@@ -169,7 +230,8 @@ wire [3:0] key = 4'd0;
 		"O5,Speed,8MHz,16MHz;",
 		"O67,CPU,FX68K-68000,TG68K-68010,TG68K-68020;",
 		"R256,Save PRAM;",
-		"T0,Reset"
+		"T0,Reset;",
+		"V,v",`BUILD_DATE
 	};
 
 	wire status_mem = status[4];
@@ -522,7 +584,7 @@ wire [3:0] key = 4'd0;
 	);
 
 // video output
-mist_video #(.COLOR_DEPTH(1)) mist_video (
+mist_video #(.COLOR_DEPTH(1), .OUT_COLOR_DEPTH(VGA_BITS)) mist_video (
 	.clk_sys     ( clk32      ),
 
 	// OSD SPI interface
