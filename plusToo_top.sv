@@ -1,5 +1,8 @@
 module plusToo_top(
 	input         CLOCK_27,
+`ifdef USE_CLOCK_50
+	input         CLOCK_50,
+`endif
 
 	output        LED,
 	output [VGA_BITS-1:0] VGA_R,
@@ -8,12 +11,26 @@ module plusToo_top(
 	output        VGA_HS,
 	output        VGA_VS,
 
+`ifdef USE_HDMI
+	output        HDMI_RST,
+	output  [7:0] HDMI_R,
+	output  [7:0] HDMI_G,
+	output  [7:0] HDMI_B,
+	output        HDMI_HS,
+	output        HDMI_VS,
+	output        HDMI_PCLK,
+	output        HDMI_DE,
+	inout         HDMI_SDA,
+	inout         HDMI_SCL,
+	input         HDMI_INT,
+`endif
+
 	input         SPI_SCK,
 	inout         SPI_DO,
 	input         SPI_DI,
-	input         SPI_SS2,
-	input         SPI_SS3,
-	input         CONF_DATA0,
+	input         SPI_SS2,    // data_io
+	input         SPI_SS3,    // OSD
+	input         CONF_DATA0, // SPI_SS for user_io
 
 `ifdef USE_QSPI
 	input         QSCK,
@@ -57,7 +74,12 @@ module plusToo_top(
 	output        I2S_LRCK,
 	output        I2S_DATA,
 `endif
-
+`ifdef SPDIF_AUDIO
+	output        SPDIF,
+`endif
+`ifdef USE_AUDIO_IN
+	input         AUDIO_IN,
+`endif
 	input         UART_RX,
 	output        UART_TX
 
@@ -83,6 +105,27 @@ localparam VGA_BITS = 8;
 localparam VGA_BITS = 6;
 `endif
 
+`ifdef USE_HDMI
+localparam bit HDMI = 1;
+assign HDMI_RST = 1'b1;
+`else
+localparam bit HDMI = 0;
+`endif
+
+`ifdef BIG_OSD
+localparam bit BIG_OSD = 1;
+`define SEP "-;",
+`else
+localparam bit BIG_OSD = 0;
+`define SEP
+`endif
+
+`ifdef USE_AUDIO_IN
+localparam bit USE_AUDIO_IN = 1;
+`else
+localparam bit USE_AUDIO_IN = 0;
+`endif
+
 // remove this if the 2nd chip is actually used
 `ifdef DUAL_SDRAM
 assign SDRAM2_A = 13'hZZZZ;
@@ -93,9 +136,9 @@ assign SDRAM2_CKE = 0;
 assign SDRAM2_CLK = 0;
 assign SDRAM2_nCS = 1;
 assign SDRAM2_DQ = 16'hZZZZ;
-assign SDRAM2_nCAS = 0;
-assign SDRAM2_nRAS = 0;
-assign SDRAM2_nWE = 0;
+assign SDRAM2_nCAS = 1;
+assign SDRAM2_nRAS = 1;
+assign SDRAM2_nWE = 1;
 `endif
 
 `include "build_id.v"
@@ -222,14 +265,17 @@ wire [3:0] key = 4'd0;
 		"PLUS_TOO;;",
 		"F1,DSK;",
 		"F2,DSK;",
+		`SEP
 		"S0,IMGVHDHD?,Mount SCSI6;",
 		"S1,IMGVHDHD?,Mount SCSI5;",
 		"S2,IMGVHDHD?,Mount SCSI4;",
 		"S3,IMGVHDHD?,Mount SCSI3;",
+		`SEP
 		"O4,Memory,1MB,4MB;",
 		"O5,Speed,8MHz,16MHz;",
 		"O67,CPU,FX68K-68000,TG68K-68010,TG68K-68020;",
 		"R256,Save PRAM;",
+		`SEP
 		"T0,Reset;",
 		"V,v",`BUILD_DATE
 	};
@@ -261,8 +307,19 @@ wire [3:0] key = 4'd0;
 	wire [8:0] sd_buff_addr;
 	wire [7:0] sd_buff_din;
 
+`ifdef USE_HDMI
+	wire       i2c_start;
+	wire       i2c_read;
+	wire [6:0] i2c_addr;
+	wire [7:0] i2c_subaddr;
+	wire [7:0] i2c_dout;
+	wire [7:0] i2c_din;
+	wire       i2c_ack;
+	wire       i2c_end;
+`endif
+
 	// include user_io module for arm controller communication
-	user_io #(.STRLEN($size(CONF_STR)>>3), .SD_IMAGES(SCSI_DEVS)) user_io (
+	user_io #(.STRLEN($size(CONF_STR)>>3), .SD_IMAGES(SCSI_DEVS), .FEATURES(32'h0 | (BIG_OSD << 13) | (HDMI << 14))) user_io (
 		.clk_sys        ( clk32          ),
 		.clk_sd         ( clk32          ),
 		.conf_str       ( CONF_STR       ),
@@ -277,6 +334,16 @@ wire [3:0] key = 4'd0;
 		.ypbpr          ( ypbpr          ),
 
 		.rtc            ( rtc            ),
+`ifdef USE_HDMI
+		.i2c_start      ( i2c_start      ),
+		.i2c_read       ( i2c_read       ),
+		.i2c_addr       ( i2c_addr       ),
+		.i2c_subaddr    ( i2c_subaddr    ),
+		.i2c_dout       ( i2c_dout       ),
+		.i2c_din        ( i2c_din        ),
+		.i2c_ack        ( i2c_ack        ),
+		.i2c_end        ( i2c_end        ),
+`endif
 
 		// ps2 interface
 		.ps2_kbd_clk    ( keyClk         ),
@@ -502,6 +569,31 @@ wire [3:0] key = 4'd0;
 		.right ( AUDIO_R )
 	);
 
+`ifdef I2S_AUDIO
+	i2s i2s (
+		.reset(1'b0),
+		.clk(clk32),
+		.clk_rate(32'd32_500_000),
+
+		.sclk(I2S_BCK),
+		.lrclk(I2S_LRCK),
+		.sdata(I2S_DATA),
+
+		.left_chan({audio, 5'd0}),
+		.right_chan({audio, 5'd0})
+	);
+`endif
+
+`ifdef SPDIF_AUDIO
+	spdif spdif (
+		.clk_i(clk32),
+		.rst_i(1'b0),
+		.clk_rate_i(32'd32_500_000),
+		.spdif_o(SPDIF),
+		.sample_i({2{audio, 5'd0}})
+	);
+`endif
+
 	dataController_top #(SCSI_DEVS) dc0(
 		.clk32(clk32),
 		.clk8_en_p(clk8_en_p),
@@ -584,7 +676,7 @@ wire [3:0] key = 4'd0;
 	);
 
 // video output
-mist_video #(.COLOR_DEPTH(1), .OUT_COLOR_DEPTH(VGA_BITS)) mist_video (
+mist_video #(.COLOR_DEPTH(1), .OUT_COLOR_DEPTH(VGA_BITS), .BIG_OSD(BIG_OSD)) mist_video (
 	.clk_sys     ( clk32      ),
 
 	// OSD SPI interface
@@ -619,6 +711,66 @@ mist_video #(.COLOR_DEPTH(1), .OUT_COLOR_DEPTH(VGA_BITS)) mist_video (
 	.VGA_VS      ( VGA_VS     ),
 	.VGA_HS      ( VGA_HS     )
 );
+
+`ifdef USE_HDMI
+i2c_master #(32_000_000) i2c_master (
+	.CLK         (clk32),
+	.I2C_START   (i2c_start),
+	.I2C_READ    (i2c_read),
+	.I2C_ADDR    (i2c_addr),
+	.I2C_SUBADDR (i2c_subaddr),
+	.I2C_WDATA   (i2c_dout),
+	.I2C_RDATA   (i2c_din),
+	.I2C_END     (i2c_end),
+	.I2C_ACK     (i2c_ack),
+
+	//I2C bus
+	.I2C_SCL     (HDMI_SCL),
+	.I2C_SDA     (HDMI_SDA)
+);
+
+mist_video #(.COLOR_DEPTH(1), .OUT_COLOR_DEPTH(VGA_BITS), .BIG_OSD(BIG_OSD), .USE_BLANKS(1'b1), .VIDEO_CLEANER(1'b1)) hdmi_video (
+	.clk_sys     ( clk32      ),
+
+	// OSD SPI interface
+	.SPI_SCK     ( SPI_SCK    ),
+	.SPI_SS3     ( SPI_SS3    ),
+	.SPI_DI      ( SPI_DI     ),
+
+	// 0 = HVSync 31KHz, 1 = CSync 15KHz
+	// no scandoubler for plus_too
+	.scandoubler_disable ( 1'b1 ),
+	// disable csync without scandoubler
+	.no_csync    ( 1'b1       ),
+	// YPbPr always uses composite sync
+	.ypbpr       ( 1'b0       ),
+	// Rotate OSD [0] - rotate [1] - left or right
+	.rotate      ( 2'b00      ),
+	// composite-like blending
+	.blend       ( 1'b0       ),
+
+	// video in
+	.R           ( pixelOut   ),
+	.G           ( pixelOut   ),
+	.B           ( pixelOut   ),
+
+	.HSync       ( hsync      ),
+	.VSync       ( vsync      ),
+	.HBlank      ( ~_hblank   ),
+	.VBlank      ( ~_vblank   ),
+
+	// MiST video output signals
+	.VGA_R       ( HDMI_R     ),
+	.VGA_G       ( HDMI_G     ),
+	.VGA_B       ( HDMI_B     ),
+	.VGA_VS      ( HDMI_VS    ),
+	.VGA_HS      ( HDMI_HS    ),
+	.VGA_DE      ( HDMI_DE    )
+);
+
+assign HDMI_PCLK = clk32;
+
+`endif
 
 // sdram used for ram/rom maps directly into 68k address space
 wire download_cycle = dio_download && dioBusControl;
