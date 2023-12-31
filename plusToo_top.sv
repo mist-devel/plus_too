@@ -729,7 +729,7 @@ i2c_master #(32_000_000) i2c_master (
 	.I2C_SDA     (HDMI_SDA)
 );
 
-mist_video #(.COLOR_DEPTH(1), .OUT_COLOR_DEPTH(VGA_BITS), .BIG_OSD(BIG_OSD), .USE_BLANKS(1'b1), .VIDEO_CLEANER(1'b1)) hdmi_video (
+mist_video #(.COLOR_DEPTH(1), .OUT_COLOR_DEPTH(8), .BIG_OSD(BIG_OSD), .USE_BLANKS(1'b1), .VIDEO_CLEANER(1'b1)) hdmi_video (
 	.clk_sys     ( clk32      ),
 
 	// OSD SPI interface
