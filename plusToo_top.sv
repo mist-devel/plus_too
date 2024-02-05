@@ -77,6 +77,12 @@ module plusToo_top(
 `ifdef SPDIF_AUDIO
 	output        SPDIF,
 `endif
+`ifdef I2S_AUDIO_HDMI
+	output        HDMI_MCLK,
+	output        HDMI_BCK,
+	output        HDMI_LRCK,
+	output        HDMI_SDATA,
+`endif
 `ifdef USE_AUDIO_IN
 	input         AUDIO_IN,
 `endif
@@ -130,8 +136,8 @@ localparam bit USE_AUDIO_IN = 0;
 `ifdef DUAL_SDRAM
 assign SDRAM2_A = 13'hZZZZ;
 assign SDRAM2_BA = 0;
-assign SDRAM2_DQML = 0;
-assign SDRAM2_DQMH = 0;
+assign SDRAM2_DQML = 1;
+assign SDRAM2_DQMH = 1;
 assign SDRAM2_CKE = 0;
 assign SDRAM2_CLK = 0;
 assign SDRAM2_nCS = 1;
@@ -582,6 +588,14 @@ wire [3:0] key = 4'd0;
 		.left_chan({audio, 5'd0}),
 		.right_chan({audio, 5'd0})
 	);
+`ifdef I2S_AUDIO_HDMI
+	assign HDMI_MCLK = 0;
+	always @(posedge clk32) begin
+		HDMI_BCK <= I2S_BCK;
+		HDMI_LRCK <= I2S_LRCK;
+		HDMI_SDATA <= I2S_DATA;
+	end
+`endif
 `endif
 
 `ifdef SPDIF_AUDIO
@@ -675,6 +689,9 @@ wire [3:0] key = 4'd0;
 		.pramWr       ( dio_write_i && dio_index == 5'h1F )
 	);
 
+reg hblank;
+always @(posedge clk32) if (videoBusControl & clk8_en_p) hblank <= ~_hblank;
+
 // video output
 mist_video #(.COLOR_DEPTH(1), .OUT_COLOR_DEPTH(VGA_BITS), .BIG_OSD(BIG_OSD)) mist_video (
 	.clk_sys     ( clk32      ),
@@ -756,7 +773,7 @@ mist_video #(.COLOR_DEPTH(1), .OUT_COLOR_DEPTH(8), .BIG_OSD(BIG_OSD), .USE_BLANK
 
 	.HSync       ( hsync      ),
 	.VSync       ( vsync      ),
-	.HBlank      ( ~_hblank   ),
+	.HBlank      ( hblank     ),
 	.VBlank      ( ~_vblank   ),
 
 	// MiST video output signals
