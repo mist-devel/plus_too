@@ -22,7 +22,7 @@ module ps2_kbd(
 	output reg [7:0] adbKey
 );
 
-	reg [8:0] 		keymac;
+	reg [9:0] 		keymac;
 	reg			key_pending;
 	reg [19:0] pacetimer;
 	reg			inquiry_active;
@@ -256,20 +256,25 @@ module ps2_kbd(
 
 	/* Handle key_pending, and multi-byte keypad responses */
 	reg keypad_byte2;
+	reg keypad_byte3;
 	always @(posedge sysclk or posedge reset)
 		if (reset) begin
 			key_pending <= 0;
 			keypad_byte2 <= 0;
+			keypad_byte3 <= 0;
 		end
 		else if (clk_en) begin
 			if (cmd_model | cmd_test)
 				key_pending <= 0;
 			else if (pop_key) begin
-				if (key_pending & keymac[8] & !keypad_byte2)
+				if(key_pending & keymac[9] && !keypad_byte3) begin
+					keypad_byte3 <= 1;
+				end else if (key_pending & keymac[8] & !keypad_byte2) begin
 					keypad_byte2 <= 1;
-				else begin
+				end else begin
 					key_pending <= 0;
 					keypad_byte2 <= 0;
+					keypad_byte3 <= 0;
 				end
 			end
 			else if (!key_pending & got_key && !got_break && !got_extend && !ignore_capslock)
@@ -278,15 +283,17 @@ module ps2_kbd(
 	
 	/* Data to Mac */
 	assign data_in = cmd_test 	? 8'h7d :
-			 cmd_model	? 8'h03 :
-			 key_pending ? ((keymac[8] & !keypad_byte2) ? 8'h79 : keymac[7:0]) :
-			 8'h7b;	
+			 cmd_model	? 8'h0b :
+			              key_pending ? (keymac[9] & !keypad_byte3 ? {keymac[7],7'h71} :
+			                                                         ((keymac[8] & !keypad_byte2) ? 8'h79 : keymac[7:0])) :
+			                            8'h7b;	
 
 	/* Keymap. XXX add option to assign ctrl/alt/windows to cmd/option
 	 * differently
 	 */
 	always @(posedge sysclk)
 	  if (clk_en && got_key && !key_pending) begin
+		  keymac[9]<=1'b0;
 		  case({extended,ibyte}) // Scan Code Set 2
 			  9'h000:		keymac[8:0] <= 9'h07b;
 			  9'h001:		keymac[8:0] <= 9'h07b;	//F9
@@ -409,10 +416,10 @@ module ps2_kbd(
 			  9'h076:		keymac[8:0] <= 9'h07b;	//ESCAPE
 			  9'h077:		keymac[8:0] <= 9'h07b;	//NUMLOCK (Mac keypad clear?)
 			  9'h078:		keymac[8:0] <= 9'h07b;	//F11 <OSD>
-			  9'h079:		keymac[8:0] <= 9'h10d;	//KP +
+			  9'h079:		keymac[9:0] <=10'h30d;	//KP +
 			  9'h07a:		keymac[8:0] <= 9'h12b;	//KP 3
 			  9'h07b:		keymac[8:0] <= 9'h11d;	//KP -
-			  9'h07c:		keymac[8:0] <= 9'h105;	//KP *
+			  9'h07c:		keymac[9:0] <=10'h305;	//KP *
 			  9'h07d:		keymac[8:0] <= 9'h139;	//KP 9
 			  9'h07e:		keymac[8:0] <= 9'h07b;	//SCROLL LOCK / KP )
 			  9'h07f:		keymac[8:0] <= 9'h07b;
@@ -618,7 +625,7 @@ module ps2_kbd(
 			  9'h147:		keymac[8:0] <= 9'h07b;
 			  9'h148:		keymac[8:0] <= 9'h07b;
 			  9'h149:		keymac[8:0] <= 9'h07b;
-			  9'h14a:		keymac[8:0] <= 9'h11b;	//KP /
+			  9'h14a:		keymac[9:0] <=10'h31b;	//KP /
 			  9'h14b:		keymac[8:0] <= 9'h07b;
 			  9'h14c:		keymac[8:0] <= 9'h07b;
 			  9'h14d:		keymac[8:0] <= 9'h07b;
@@ -661,7 +668,7 @@ module ps2_kbd(
 			  9'h172:		keymac[8:0] <= 9'h111;	//ARROW DOWN
 			  9'h173:		keymac[8:0] <= 9'h07b;
 			  9'h174:		keymac[8:0] <= 9'h105;	//ARROW RIGHT
-			  9'h175:		keymac[8:0] <= 9'h10b;	//ARROW UP
+			  9'h175:		keymac[8:0] <= 9'h11b;	//ARROW UP
 			  9'h176:		keymac[8:0] <= 9'h07b;
 			  9'h177:		keymac[8:0] <= 9'h07b;
 			  9'h178:		keymac[8:0] <= 9'h07b;
