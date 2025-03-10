@@ -298,6 +298,7 @@ wire [3:0] key = 4'd0;
 	// ps2 interface for mouse, to be mapped into user_io
 	wire mouseClk;
 	wire mouseData;
+	wire capsLock;
 	wire keyClk;
 	wire keyData;
 	wire [63:0] rtc;
@@ -356,6 +357,7 @@ wire [3:0] key = 4'd0;
 		.ps2_kbd_data   ( keyData        ),
 		.ps2_mouse_clk  ( mouseClk       ),
 		.ps2_mouse_data ( mouseData	     ),
+		.leds           ({2'b01, 4'd0, capsLock, 1'b1}),
 
 		// SD/block device interface
 		.img_mounted    ( img_mounted    ),
@@ -640,7 +642,8 @@ wire [3:0] key = 4'd0;
 
 		// peripherals
 		.keyClk(keyClk), 
-		.keyData(keyData), 
+		.keyData(keyData),
+		.capsLock(capsLock),
 		.mouseClk(mouseClk),
 		.mouseData(mouseData),
 		.serialIn(serialIn),

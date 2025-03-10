@@ -19,7 +19,9 @@ module ps2_kbd(
 
 	//ADB
 	output reg adbStrobe,
-	output reg [7:0] adbKey
+	output reg [7:0] adbKey,
+
+	output reg capsLock
 );
 
 	reg [9:0] 		keymac;
@@ -28,7 +30,6 @@ module ps2_kbd(
 	reg			inquiry_active;
 	reg 			extended;
 	reg 			keybreak;
-	reg			capslock;
 	reg			haskey;
 	wire        ignore_capslock;
 	wire 			got_key;
@@ -107,7 +108,7 @@ module ps2_kbd(
 	 *  - next   : next state
 	 *  - obyte  : next byte to send
 	 */
-	always@(timeout or state or istrobe or ibyte or capslock) begin
+	always@(timeout or state or istrobe or ibyte or capsLock) begin
 		nreq = 0;
 		next = state;
 		nbyte = 8'hff;
@@ -125,7 +126,7 @@ module ps2_kbd(
 			  ps2k_state_led1: begin
 				  nreq = 1;
 				  if (istrobe && ibyte == 8'hfa) begin
-					  nbyte = { 5'b00000, capslock, 1'b1, 1'b0 };
+					  nbyte = { 5'b00000, capsLock, 1'b1, 1'b0 };
 					  next = ps2k_state_led2;
 				  end else
 				    next = ps2k_state_init;
@@ -172,14 +173,14 @@ module ps2_kbd(
 	assign got_key = (state == ps2k_state_wait) && istrobe;
 	assign got_break = { ibyte[7:1], 1'b0 } == 8'hf0; 
 	assign got_extend = { ibyte[7:1], 1'b0 } == 8'he0; 
-	assign ignore_capslock = {extended,ibyte} == 9'h058 && capslock;
+	assign ignore_capslock = {extended,ibyte} == 9'h058 && capsLock;
 	
 	/* Latch key info from PS2, handle capslock state */
 	always@(posedge sysclk or posedge reset)
 	  if (reset) begin
 		  extended <= 0;
 		  keybreak <= 0;	
-		  capslock <= 0;
+		  capsLock <= 0;
 	  end else if (clk_en && got_key) begin
 		  if (got_break)
 		    keybreak <= 1;
@@ -191,7 +192,7 @@ module ps2_kbd(
 
 			  /* Capslock handling */
 			  if (ibyte == 8'h58 && !keybreak)
-			    capslock <= ~capslock;
+			    capsLock <= ~capsLock;
 		  end
 	  end
 	
@@ -1332,7 +1333,7 @@ module ps2_kbd(
 			if ({extended, ibyte} == 9'h058) begin
 				// CAPS LOCK
 				if (!keybreak) begin
-					adbKey[7] <= capslock;
+					adbKey[7] <= capsLock;
 					adbStrobe <= 1;
 				end
 			end else begin

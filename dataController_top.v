@@ -41,8 +41,9 @@ module dataController_top(
 	
 	// keyboard:
 	input keyClk, 
-	input keyData, 
-	 
+	input keyData,
+	output capsLock,
+
 	// mouse:
 	input mouseClk, 
 	input mouseData,
@@ -514,7 +515,8 @@ module dataController_top(
 		.data_in(kbd_in_data),         // data to mac
 		.strobe_in(kbd_in_strobe),
 		.adbStrobe(adbKeyStrobe),
-		.adbKey(adbKeyData)
+		.adbKey(adbKeyData),
+		.capsLock(capsLock)
 	);
 
 	reg  [7:0] adb_din;
