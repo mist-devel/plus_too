@@ -206,7 +206,7 @@ TG68KdotC_Kernel #(2,2,2,2,2,2,1,1) tg68k (
 	.IPL            ( ipl           ),
 	.IPL_autovector ( 1'b0          ),
 	.berr           ( berr          ),
-	.clr_berr       ( tg68_clr_berr ),
+	.clr_berr       (               ),
 	.CPU            ( cpu           ), // 00->68000  01->68010  11->68020(only some parts - yet)
 	.addr_out       ( tg68_addr     ),
 	.data_write     ( dout          ),

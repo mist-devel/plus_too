@@ -69,7 +69,8 @@ module addrController_top(
 	
 	reg [21:0] audioAddr; 
 	reg [19:0] snd_div;
-	
+
+	wire sndReadAck;
 	reg sndReadAckD;
 	always @(posedge clk)
 		if (clk8_en_n) sndReadAckD <= sndReadAck;

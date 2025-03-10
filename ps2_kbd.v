@@ -30,6 +30,7 @@ module ps2_kbd(
 	reg 			keybreak;
 	reg			capslock;
 	reg			haskey;
+	wire        ignore_capslock;
 	wire 			got_key;
 	wire 			got_break;
 	wire 			got_extend;
